@@ -18,10 +18,12 @@
 
 ## ① GAS版のセットアップ
 
-`src/` フォルダの中身を Google Apps Script に貼り付けてデプロイします。詳しい手順は [SETUP.md](SETUP.md) を見てください。
+**いちばん簡単な方法（約5分・コピペ不要）**: [配布プロジェクトを開く](https://script.google.com/d/1z31SLzxlT6xVxuL_vfOCMmU-GczQuKrDO75Ez2sMbbQVjAeYtHNqDlTt/edit) → 上部の「コピーを作成」→ ウェブアプリとしてデプロイ（実行=自分／アクセス=全員）→ URLに `?admin=setup` を付けて開くと、**画面内のウィザードが残りの設定（合言葉→AIキー→テスト→セッション作成）を1本道で案内**します。
 
-- Gemini APIキーはソースに書かず、先生画面から設定します（スクリプトプロパティに保存）。
-- 先生用の合言葉は、デプロイ後に `?admin=setup` で初回設定します。
+手動で構築したい場合は `src/` の中身を貼り付けます。詳しくは [SETUP.md](SETUP.md) と[配布サイト](https://k5610018-satoshin.github.io/moyatto/)を見てください。
+
+- Gemini APIキーはソースに書かず、画面から設定します（スクリプトプロパティに保存）。使用モデルは Gemini 3.1 Flash-Lite。
+- 授業用スライド（PowerPoint）も配布サイトからダウンロードできます。
 
 ## ② Gem版のセットアップ
 

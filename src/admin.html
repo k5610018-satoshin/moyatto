@@ -141,6 +141,18 @@
   .setup-steps summary{cursor:pointer;font-weight:800;color:var(--teal-d)}
   .setup-steps ol{margin:8px 0 0;padding-left:22px}
 
+  /* はじめてウィザード（APIキー未設定のとき） */
+  .wizard{max-width:720px;margin:18px auto;padding:0 14px}
+  .wizard-card{background:#fff;border:1.5px solid var(--line);border-radius:16px;padding:18px 20px;box-shadow:0 10px 26px rgba(61,100,130,.10)}
+  .wizard-card h2{margin:0 0 4px;color:var(--teal-d);font-size:1.15rem}
+  .wiz-steps{display:flex;gap:6px;margin:10px 0 14px;flex-wrap:wrap}
+  .wiz-step{border-radius:999px;padding:4px 12px;font-size:.8rem;font-weight:800;background:#EEF2F6;color:#8B98A6}
+  .wiz-step.done{background:#E7F5E9;color:#376B43}
+  .wiz-step.now{background:#3A98B5;color:#fff}
+  .wiz-msg{min-height:1.3em;font-size:.86rem;font-weight:700;color:var(--teal-d);margin-top:6px}
+  .wiz-skip{margin-top:10px;font-size:.8rem;text-align:right}
+  .wiz-skip a{color:#8B98A6}
+
   @media (max-width:760px){
     body{overflow:auto;height:auto}
     .dash{grid-template-columns:1fr;grid-template-rows:none;height:auto;overflow:visible}
@@ -177,12 +189,56 @@
         <p class="muted" id="initAdminMsg">デプロイしたら、すぐに設定してください。</p>
         <div class="row hidden" id="newTeacherUrlRow">
           <input class="url" id="newTeacherUrl" type="text" readonly value="">
+          <button class="btn" id="openTeacherBtn">開く</button>
         </div>
+        <p class="muted hidden" id="newTeacherHint">⭐ この先生用URLを<b>ブックマークしてから</b>「開く」を押してください。続きの設定（AIのキーなど）をそのまま案内します。</p>
       </div>
       <div id="wrongKeyHelp" class="hidden">
         <p class="muted">先生用の合言葉がちがうか、URLに <code>?admin=合言葉</code> が付いていません。</p>
         <p class="muted">例: <span id="exampleUrl2"></span>?admin=あなたの合言葉</p>
       </div>
+    </div>
+  </div>
+
+  <!-- はじめてウィザード（APIキー未設定のときに表示） -->
+  <div id="wizard" class="wizard hidden">
+    <div class="wizard-card">
+      <h2>🚀 はじめての設定</h2>
+      <p class="muted">あと少しで使えます。上から順に進めてください。</p>
+      <div class="wiz-steps">
+        <span class="wiz-step done">1. 合言葉 ✅</span>
+        <span class="wiz-step now" id="wizStep2Chip">2. AIのキー</span>
+        <span class="wiz-step" id="wizStep3Chip">3. クラスで使う準備</span>
+      </div>
+
+      <div id="wizStep2">
+        <p style="margin:6px 0"><b>Gemini APIキー</b>（無料）を貼り付けます。
+          <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener">AI Studio でキーを作る（別タブで開きます）</a></p>
+        <div class="row">
+          <input id="wizKey" type="password" placeholder="作ったAPIキーを ここに貼り付け" style="flex:1" autocomplete="off">
+          <button class="btn" id="wizKeyBtn">保存してテスト</button>
+        </div>
+        <p class="wiz-msg" id="wizKeyMsg"></p>
+      </div>
+
+      <div id="wizStep3" class="hidden">
+        <p style="margin:6px 0"><b>セッション</b>（授業のへや）を作って、児童用URLを配れば完成です。</p>
+        <div class="row">
+          <input id="wizSess" type="text" placeholder="セッション名（例: 5年1組 7/10）" style="flex:1">
+          <button class="btn" id="wizSessBtn">作成する</button>
+        </div>
+        <div id="wizDone" class="hidden" style="margin-top:10px">
+          <p class="wiz-msg">🎉 準備完了！ 下の児童用URLを配れば、すぐ始められます。</p>
+          <div class="row">
+            <input class="url" id="wizJoinUrl" type="text" readonly value="" style="flex:1">
+            <button class="btn ghost" id="wizCopyBtn">コピー</button>
+          </div>
+          <p class="muted">このページ（先生用URL）はブックマークしておきましょう。細かい設定は右上の「⚙ 設定・セッション」からいつでもできます。</p>
+        </div>
+        <p class="wiz-msg" id="wizSessMsg"></p>
+      </div>
+
+      <p class="wiz-skip"><a href="#" id="wizSkip">あとで設定する（ダッシュボードへ）</a></p>
     </div>
   </div>
 
@@ -349,10 +405,12 @@ function initializeAdmin(){
   google.script.run
     .withSuccessHandler(function(r){
       $('initAdminBtn').disabled = false;
-      $('initAdminMsg').textContent = '設定しました。下の先生用URLを開いてください。';
+      $('initAdminMsg').textContent = '設定しました！';
       var url = (r && r.teacherUrl) ? r.teacherUrl : ((WEBAPP_URL || '') + '?admin=' + encodeURIComponent(key));
       $('newTeacherUrl').value = url;
       $('newTeacherUrlRow').classList.remove('hidden');
+      $('newTeacherHint').classList.remove('hidden');
+      var ob = $('openTeacherBtn'); if(ob) ob.onclick = function(){ location.href = url; };
     })
     .withFailureHandler(function(e){
       $('initAdminBtn').disabled = false;
@@ -394,8 +452,69 @@ function updateFlag(name, value){
 
 // ===== 設定 =====
 function loadSettings(){
-  google.script.run.withSuccessHandler(function(s){ $('keyStatus').textContent = (s && s.geminiSet) ? '設定済み ✅' : '未設定 ⚠️'; })
+  google.script.run.withSuccessHandler(function(s){
+    $('keyStatus').textContent = (s && s.geminiSet) ? '設定済み ✅' : '未設定 ⚠️';
+    if(!(s && s.geminiSet)) showWizard();   // APIキー未設定なら、はじめてウィザードで1本道に案内
+  })
     .withFailureHandler(function(){ $('keyStatus').textContent = '取得エラー'; }).getSettings(ADMIN_KEY);
+}
+
+// ===== はじめてウィザード =====
+var wizardActive = false;
+function showWizard(){
+  if(wizardActive) return;
+  wizardActive = true;
+  $('wizard').classList.remove('hidden');
+  $('wizKeyBtn').onclick = wizSaveAndTest;
+  $('wizSessBtn').onclick = wizCreateSession;
+  $('wizCopyBtn').onclick = function(){
+    var el = $('wizJoinUrl'); el.select();
+    try{ document.execCommand('copy'); $('wizSessMsg').textContent = 'コピーしました。'; }catch(e){}
+    if(navigator.clipboard && el.value) navigator.clipboard.writeText(el.value);
+  };
+  $('wizSkip').onclick = function(ev){ ev.preventDefault(); hideWizard(); };
+}
+function hideWizard(){ wizardActive = false; $('wizard').classList.add('hidden'); }
+function wizSaveAndTest(){
+  var k = ($('wizKey').value || '').trim();
+  if(!k){ $('wizKeyMsg').textContent = 'APIキーを貼り付けてください。'; return; }
+  $('wizKeyBtn').disabled = true; $('wizKeyMsg').textContent = '保存しています…';
+  google.script.run.withSuccessHandler(function(){
+    $('wizKeyMsg').textContent = '保存しました。AIの動作をテストしています…（10秒ほど待ってね）';
+    google.script.run.withSuccessHandler(function(r){
+      $('wizKeyBtn').disabled = false;
+      if(r && r.ok){
+        $('wizKey').value = '';
+        $('wizKeyMsg').textContent = '';
+        $('keyStatus').textContent = '設定済み ✅';
+        var c2 = $('wizStep2Chip'); c2.classList.remove('now'); c2.classList.add('done'); c2.textContent = '2. AIのキー ✅';
+        $('wizStep3Chip').classList.add('now');
+        $('wizStep2').classList.add('hidden');
+        $('wizStep3').classList.remove('hidden');
+      }else{
+        $('wizKeyMsg').textContent = 'テスト失敗: ' + ((r && r.error) || '') + ' キーをもう一度確認してください。';
+      }
+    }).withFailureHandler(function(e){
+      $('wizKeyBtn').disabled = false;
+      $('wizKeyMsg').textContent = 'テストエラー: ' + ((e && e.message) || '');
+    }).testGemini(ADMIN_KEY);
+  }).withFailureHandler(function(e){
+    $('wizKeyBtn').disabled = false;
+    $('wizKeyMsg').textContent = '保存エラー: ' + ((e && e.message) || '');
+  }).setGeminiKey(ADMIN_KEY, k);
+}
+function wizCreateSession(){
+  $('wizSessBtn').disabled = true; $('wizSessMsg').textContent = '作成中…';
+  google.script.run.withSuccessHandler(function(res){
+    $('wizSessBtn').disabled = false; $('wizSessMsg').textContent = '';
+    var c3 = $('wizStep3Chip'); c3.classList.remove('now'); c3.classList.add('done'); c3.textContent = '3. クラスで使う準備 ✅';
+    $('wizDone').classList.remove('hidden');
+    $('wizJoinUrl').value = (WEBAPP_URL && res && res.code) ? (WEBAPP_URL + '?s=' + res.code) : '';
+    refreshSessions(res && res.code);
+  }).withFailureHandler(function(e){
+    $('wizSessBtn').disabled = false;
+    $('wizSessMsg').textContent = '作成エラー: ' + ((e && e.message) || '');
+  }).createSession(ADMIN_KEY, $('wizSess').value || 'はじめてのセッション');
 }
 function saveKey(){
   var k = ($('geminiKey').value || '').trim();
@@ -417,7 +536,7 @@ function doCreate(){
 function refreshSessions(selectCode){
   google.script.run.withSuccessHandler(function(list){
     var sel = $('sessionSel'); sel.innerHTML = '';
-    if(!list.length){ var o=document.createElement('option'); o.value=''; o.textContent='（セッション無し → 設定で作成）'; sel.appendChild(o); currentCode=''; updateCode(); $('overlay').classList.add('show'); return; }
+    if(!list.length){ var o=document.createElement('option'); o.value=''; o.textContent='（セッション無し → 設定で作成）'; sel.appendChild(o); currentCode=''; updateCode(); if(!wizardActive) $('overlay').classList.add('show'); return; }
     list.forEach(function(s){ var o=document.createElement('option'); o.value=s.code; o.textContent=(s.active?'':'[終了] ')+(s.title||'(無題)')+' / '+s.code; sel.appendChild(o); });
     sel.value = selectCode || currentCode || list[0].code;
     onSelect();

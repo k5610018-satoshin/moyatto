@@ -82,9 +82,9 @@
       <div class="plan">
         <span class="tag">フル機能・教室向け</span>
         <h3>① GAS版（Webアプリ）</h3>
-        <p>クラス全員が同時に使い、先生画面で見取りができる本格版。児童はログイン不要のURLを開くだけ。</p>
+        <p>クラス全員が同時に使い、先生画面で見取りができる本格版。児童はログイン不要のURLを開くだけ。<b>コピー1回で自分のものになり、貼り付け作業はありません。</b></p>
         <p class="muted">セッション管理／自分の履歴／みんなの言いかえ一覧／ベスト3投票／AI判定（浅い言い換えは通さない）</p>
-        <a class="btn" href="downloads/moyatto-gas-src.zip">⬇️ ソース一式をダウンロード</a>
+        <a class="btn" href="#gas">🚀 コピーして始める（約5分）</a>
       </div>
       <div class="plan">
         <span class="tag">2分で準備・個人向け</span>
@@ -97,24 +97,63 @@
   </section>
 
   <section id="gas">
-    <h2>① GAS版のセットアップ（約15分）</h2>
+    <h2>① GAS版のセットアップ（コピーするだけ・約5分）</h2>
+    <p>ファイルの貼り付け作業はありません。<b>コピー → デプロイ → 画面の案内に従う</b>の3ステップです。</p>
+
+    <h3>STEP 1. プロジェクトをコピーする（30秒）</h3>
     <ol class="steps">
-      <li><a href="downloads/moyatto-gas-src.zip">ソース一式（zip）</a>をダウンロードして展開します。</li>
-      <li><a href="https://script.google.com" target="_blank" rel="noopener">script.google.com</a> で「新しいプロジェクト」を作ります。</li>
-      <li>zip内 <code>src/</code> の各ファイルを、同じ名前で作成して貼り付けます（<code>.gs</code> はスクリプト、<code>index.html</code>・<code>admin.html</code> はHTMLファイルとして作成。<code>appsscript.json</code> は「プロジェクトの設定 → マニフェストを表示」で置き換え）。</li>
-      <li>「デプロイ → 新しいデプロイ → ウェブアプリ」。実行ユーザー「自分」、アクセス「全員」（児童がログイン不要になります）。</li>
-      <li>デプロイURLに <code>?admin=setup</code> を付けて開き、先生用の合言葉を設定します（初回のみ）。</li>
-      <li>先生画面の「設定・セッション」で、<a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a> で作った Gemini APIキーを保存 →「テスト」で応答を確認します。</li>
-      <li>セッションを作成し、児童用URLを配れば準備完了です。</li>
+      <li>Googleにログインした状態で、<a href="https://script.google.com/d/1z31SLzxlT6xVxuL_vfOCMmU-GczQuKrDO75Ez2sMbbQVjAeYtHNqDlTt/edit" target="_blank" rel="noopener"><b>配布プロジェクト「モヤット」を開く</b></a>（閲覧専用で開きます）。</li>
+      <li>画面上部の「<b>コピーを作成</b>」アイコン（📄が2枚重なったマーク）を押します。自分のアカウントにコピーができます。</li>
     </ol>
+
+    <h3>STEP 2. ウェブアプリとしてデプロイする（2分）</h3>
+    <ol class="steps">
+      <li>コピーしたプロジェクトで「<b>デプロイ → 新しいデプロイ</b>」→ 歯車から種類「<b>ウェブアプリ</b>」を選択。</li>
+      <li>「次のユーザーとして実行」＝<b>自分</b> ／「アクセスできるユーザー」＝<b>全員</b>（児童がログイン不要になります）→「デプロイ」。</li>
+      <li>「アクセスを承認」を求められたら自分のアカウントを選びます。<b>「このアプリは Google で確認されていません」と出ても大丈夫</b>——自分で作ったアプリに自分が許可を出す画面です。「<b>詳細</b>」→「<b>（安全ではないページ）に移動</b>」→「<b>許可</b>」と進んでください。</li>
+      <li>表示された「ウェブアプリのURL」をコピーします。</li>
+    </ol>
+
+    <h3>STEP 3. 開いて、画面の案内どおりに設定する（2分）</h3>
+    <ol class="steps">
+      <li>ウェブアプリURLの末尾に <code>?admin=setup</code> を付けて開きます。</li>
+      <li>先生用の合言葉（8文字以上）を決めます → 表示された先生用URLを<b>ブックマークしてから</b>「開く」。</li>
+      <li>あとは画面の「🚀 はじめての設定」が1本道で案内します: <b>AIのキーを貼る（<a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener">AI Studio</a>で無料作成）→ 自動テスト → セッション作成 → 児童用URLをコピー</b>。これで完成です🎉</li>
+    </ol>
+
+    <details>
+      <summary>うまくいかないとき（よくあるつまずき）</summary>
+      <ul>
+        <li><b>「コピーを作成」が見つからない</b>: Googleにログインしているか確認。学校アカウントで組織の制限がある場合は、個人アカウントでも試せます。</li>
+        <li><b>児童の端末で開けない</b>: デプロイ設定の「アクセスできるユーザー」が「<b>全員</b>」になっているか確認してください。</li>
+        <li><b>AIテストが失敗する</b>: キーをコピーし直してもう一度。学校のネットワークがAI系接続を制限している場合もあります。</li>
+        <li><b>あとでアプリを更新したい</b>: 「デプロイ → デプロイを管理 → ✏️編集 → バージョン: 新バージョン」で、URLを変えずに更新できます。</li>
+      </ul>
+    </details>
+    <details>
+      <summary>zipから手動でセットアップしたい場合（上級者向け）</summary>
+      <ol class="steps">
+        <li><a href="downloads/moyatto-gas-src.zip">ソース一式（zip）</a>をダウンロードして展開します。</li>
+        <li><a href="https://script.google.com" target="_blank" rel="noopener">script.google.com</a> で新規プロジェクトを作り、zip内 <code>src/</code> の各ファイルを同じ名前で作成して貼り付けます（<code>.gs</code> はスクリプト、<code>index.html</code>・<code>admin.html</code> はHTML。<code>appsscript.json</code> は「プロジェクトの設定 → マニフェストを表示」で置き換え）。</li>
+        <li>以降は STEP 2〜3 と同じです。</li>
+      </ol>
+    </details>
     <details>
       <summary>だいじな注意（配布・運用）</summary>
       <ul>
-        <li>APIキーはソースコードに書かないでください（先生画面から設定すると、スクリプトプロパティにだけ保存されます）。</li>
+        <li>APIキーはソースコードに書かないでください（画面から設定すると、スクリプトプロパティにだけ保存されます）。</li>
         <li>先生用URL（合言葉つき）は児童に共有しないでください。</li>
         <li>「みんなの言いかえ」の名前表示は<b>既定で匿名</b>です。先生画面のスイッチで切り替えられます。</li>
       </ul>
     </details>
+    <p class="muted">使うAI: Gemini 3.1 Flash-Lite に設定済み（低コストで無料枠でも運用しやすいモデル）。APIキーは各先生ご自身のものを使います。</p>
+  </section>
+
+  <section>
+    <h2>📽️ 授業用スライド（PowerPoint）</h2>
+    <p>作者が実際の授業（小5・リフレーミングの導入）で使ったスライドです。だまし絵の問いかけから入り、「事実」と「とらえ方」を分ける流れになっています。アプリと組み合わせてそのまま使えます。</p>
+    <a class="btn" href="downloads/リフレーミングの授業_5年生オンラインver.pptx">⬇️ スライドをダウンロード（PowerPoint・約27MB）</a>
+    <p class="muted" style="margin-top:8px">学校・教育目的での利用・改変は自由です。</p>
   </section>
 
   <section id="gem">
@@ -139,7 +178,7 @@
     <h2>⚖️ 機能のちがい</h2>
     <table>
       <tr><th></th><th>GAS版</th><th>Gem版</th></tr>
-      <tr><td>準備時間</td><td>約15分</td><td>約2分</td></tr>
+      <tr><td>準備時間</td><td>約5分（コピーするだけ）</td><td>約2分</td></tr>
       <tr><td>児童のログイン</td><td>不要にできる</td><td>Googleアカウント必要</td></tr>
       <tr><td>なやみカード</td><td>49種＋児童が追加提案（先生承認制）</td><td>49種＋自由入力</td></tr>
       <tr><td>AI判定・ヒント</td><td>Gemini APIで判定／ヒント3回</td><td>Gemの指示で同等ルールを再現</td></tr>
