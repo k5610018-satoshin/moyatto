@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>モヤット 先生用</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;500;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#EEF3F8; --ink:#33404D; --ink-soft:#6B7785; --teal:#2E9BB8; --teal-d:#247C95;
+    --card:#FFFFFF; --line:#E1E8EF; --sun-d:#F4B73E; --sun:#FFD25A; --warn:#EF6F54;
+    --ok:#43B581; --idle:#E6B422; --off:#B9C4CE; --coral:#EF6F54; --shadow:0 6px 18px rgba(60,90,120,.10);
+  }
+  *{box-sizing:border-box}
+  .hidden{display:none !important}
+  html,body{height:100%;margin:0}
+  body{font-family:"M PLUS Rounded 1c",system-ui,sans-serif;color:var(--ink);background:var(--bg);
+    display:flex;flex-direction:column;height:100vh;overflow:hidden}
+
+  .bar{display:flex;align-items:center;gap:10px;padding:10px 16px;background:#fff;border-bottom:1px solid var(--line);flex:0 0 auto}
+  .bar .title{font-size:1.1rem;font-weight:800;white-space:nowrap}
+  .sessionsel{flex:0 1 280px;border:1.5px solid var(--line);border-radius:10px;padding:7px 10px;font-family:inherit;font-size:.92rem;min-width:0}
+  .bar .meta{color:var(--ink-soft);font-size:.8rem;white-space:nowrap}
+  .bar .spacer{flex:1}
+  .btn{border:none;border-radius:10px;padding:8px 14px;font-family:inherit;font-weight:800;font-size:.9rem;background:var(--teal);color:#fff;cursor:pointer;white-space:nowrap}
+  .btn:hover{background:var(--teal-d)}
+  .btn.ghost{background:#EAF3F7;color:var(--teal-d)}
+  .btn.warn{background:#FBE6E1;color:var(--warn)}
+  .btn:disabled{background:var(--off);cursor:default}
+
+  /* ===== ダッシュボード（4パネル・全部一覧） ===== */
+  .dash{flex:1;display:grid;grid-template-columns:1.6fr 1fr;grid-template-rows:1fr 1fr;gap:12px;padding:12px 14px;min-height:0;overflow:hidden}
+  #panel-people{grid-column:1;grid-row:1}
+  #panel-wall{grid-column:1;grid-row:2}
+  #panel-rank{grid-column:2;grid-row:1}
+  #panel-prop{grid-column:2;grid-row:2}
+
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);display:flex;flex-direction:column;min-height:0;overflow:hidden}
+  .phead{display:flex;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid var(--line);flex:0 0 auto}
+  .phead h2{font-size:1rem;margin:0;display:flex;align-items:center;gap:7px}
+  .phead .cnt{color:var(--ink-soft);font-size:.82rem;font-weight:700}
+  .phead-r{margin-left:auto;display:flex;align-items:center;gap:8px}
+  .fsbtn{border:none;background:#EEF4F8;color:var(--teal-d);border-radius:8px;width:30px;height:30px;font-size:1rem;cursor:pointer;flex:0 0 auto;line-height:1}
+  .fsbtn:hover{background:#DCEBF2}
+  .pbody{flex:1;overflow-y:auto;min-height:0;padding:10px 12px}
+
+  /* 全画面（投影用・大きめ） */
+  .panel.fullscreen{position:fixed;inset:0;z-index:60;border-radius:0;border:none}
+  .panel.fullscreen .phead{padding:14px 22px}
+  .panel.fullscreen .phead h2{font-size:1.7rem}
+  .panel.fullscreen .pbody{padding:18px 26px}
+  .panel.fullscreen .grid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
+  .panel.fullscreen .cell .nm{font-size:1.15rem}
+  .panel.fullscreen .cell .sc{font-size:1.5rem}
+  .panel.fullscreen .top10 li{font-size:1.35rem;padding:11px 8px}
+  .panel.fullscreen .wgroup h3{font-size:1.5rem}
+  .panel.fullscreen .witem{font-size:1.35rem;padding:9px 0}
+  .panel.fullscreen .pcard{font-size:1.1rem}
+  .panel.fullscreen .pfield{font-size:1.15rem}
+
+  /* 参加者グリッド（得点＋状況） */
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(116px,1fr));gap:8px;align-content:start}
+  .cell{background:#FBFDFF;border:1px solid var(--line);border-radius:12px;padding:8px 9px;min-width:0}
+  .cell .nm{font-weight:800;font-size:.88rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .cell .sc{font-weight:800;color:var(--sun-d);font-size:1.05rem;margin:1px 0}
+  .cell .st{display:flex;align-items:center;gap:4px;font-size:.72rem;color:var(--ink-soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .dot{width:9px;height:9px;border-radius:50%;flex:0 0 auto;display:inline-block}
+  .dot.on{background:var(--ok)} .dot.idle{background:var(--idle)} .dot.off{background:var(--off)}
+  .empty{color:var(--ink-soft);padding:14px 4px;font-size:.9rem;text-align:center}
+
+  /* ランキング */
+  .top10{list-style:none;margin:0;padding:0}
+  .top10 li{display:flex;align-items:center;gap:8px;padding:7px 6px;border-bottom:1px solid var(--line);font-size:.95rem}
+  .top10 li .rk{width:26px;height:26px;border-radius:50%;background:#EEF2F6;color:var(--ink-soft);font-weight:800;display:flex;align-items:center;justify-content:center;font-size:.85rem;flex:0 0 auto}
+  .top10 li.r1 .rk{background:#FFE9A8;color:#A6791B}
+  .top10 li.r2 .rk{background:#E6ECF1;color:#6B7785}
+  .top10 li.r3 .rk{background:#F4DEC7;color:#A6713B}
+  .top10 li .nm{flex:1;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .top10 li .sc{font-weight:800;color:var(--sun-d);white-space:nowrap}
+
+  /* みんなの見方（悩み別） */
+  .wgroup{border-top:1px solid var(--line);padding:9px 0}
+  .wgroup:first-child{border-top:none}
+  .wgroup h3{margin:0 0 6px;font-size:1.02rem}
+  .wgroup .cnt{color:var(--ink-soft);font-size:.82rem;font-weight:700}
+  .witem{font-size:.95rem;padding:5px 0;line-height:1.5}
+  .witem .who{font-weight:800;color:var(--teal-d);margin-right:6px}
+  .mini-toggle{display:flex;align-items:center;gap:5px;font-size:.76rem;font-weight:800;color:var(--ink-soft);white-space:nowrap}
+  .mini-toggle input{width:16px;height:16px;min-width:auto;padding:0}
+  .wall-split{border-top:1px solid var(--line);margin:10px 0;padding-top:10px}
+  .vote-title{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 7px;font-size:.96rem;color:var(--teal-d)}
+  .vote-list{display:grid;gap:8px}
+  .vote-card{background:#FFFDF7;border:1px solid #F1DE9E;border-radius:12px;padding:9px 10px;line-height:1.5}
+  .vote-card-top{display:flex;align-items:center;justify-content:space-between;gap:8px;font-weight:800;color:#806217;font-size:.86rem}
+  .vote-card .rf{font-size:.95rem;margin-top:3px}
+  .vote-card .ctx{color:var(--ink-soft);font-size:.78rem;font-weight:700}
+  .vote-card details{margin-top:5px;color:var(--ink-soft);font-size:.78rem}
+  .wall-tabs{display:flex;gap:6px;align-items:center}
+  .tabbtn{border:1px solid var(--line);background:#F3F7FA;color:var(--ink-soft);border-radius:999px;padding:6px 10px;
+    font-family:inherit;font-size:.78rem;font-weight:800;cursor:pointer;white-space:nowrap}
+  .tabbtn.active{background:var(--teal);border-color:var(--teal);color:#fff}
+  .wall-tools{display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:8px 12px;border-bottom:1px solid var(--line);background:#FBFDFF}
+  .switch{display:inline-flex;align-items:center;gap:6px;font-size:.82rem;font-weight:800;color:var(--ink)}
+  .switch input{width:18px;height:18px;min-width:18px;accent-color:var(--teal)}
+  .vitem{border:1px solid var(--line);border-radius:12px;background:#FBFDFF;padding:10px 12px;margin-bottom:10px}
+  .vtop{display:flex;align-items:center;gap:10px;justify-content:space-between;font-weight:800}
+  .votes{background:#FFF0F3;color:#B84C65;border-radius:999px;padding:3px 10px;white-space:nowrap}
+  .vmeta{font-size:.82rem;color:var(--ink-soft);font-weight:700;margin-top:3px}
+  .vtext{font-size:1rem;line-height:1.55;margin-top:6px}
+  .voters{margin-top:7px;font-size:.82rem;color:var(--ink-soft)}
+  .voters summary{cursor:pointer;font-weight:800;color:var(--teal-d)}
+
+  /* なやみ承認 */
+  .pcard{border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:10px;background:#FBFDFF}
+  .pmeta{font-size:.78rem;color:var(--ink-soft);font-weight:700}
+  .praw{font-size:.82rem;color:var(--ink-soft);margin:2px 0 7px;background:#F1F5F9;border-radius:8px;padding:5px 8px}
+  .pfield{font-size:.94rem;margin:3px 0;line-height:1.5}
+  .pfield span{color:var(--ink-soft);font-size:.8rem;font-weight:700}
+  .prow{display:flex;gap:8px;margin-top:9px}
+  .btn.approve{background:var(--ok)}
+  .btn.approve:hover{background:#379e6f}
+  .pdone{color:var(--ok);font-weight:800;font-size:.9rem;margin-top:8px}
+
+  /* 設定オーバーレイ */
+  .overlay{position:fixed;inset:0;background:rgba(40,55,70,.45);display:none;align-items:flex-start;justify-content:center;z-index:80;overflow-y:auto;padding:30px 16px}
+  .overlay.show{display:flex}
+  .panel-modal{background:#fff;border-radius:16px;max-width:620px;width:100%;box-shadow:0 20px 50px rgba(0,0,0,.25);padding:18px 20px 22px}
+  .panel-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+  .panel-head h2{margin:0;font-size:1.15rem}
+  .sec{border-top:1px solid var(--line);padding:14px 0}
+  .sec h3{margin:0 0 8px;font-size:1rem}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  input{border:1.5px solid var(--line);border-radius:10px;padding:9px 11px;font-family:inherit;font-size:.95rem;min-width:0}
+  .muted{color:var(--ink-soft);font-size:.84rem}
+  .pill{display:inline-block;background:#EEF4F8;border-radius:999px;padding:2px 10px;font-size:.8rem;font-weight:700;color:var(--teal-d)}
+  .code{font-weight:800;font-size:1.3rem;letter-spacing:.1em;color:var(--teal-d)}
+  .url{flex:1;background:#F2F6FA}
+  .setup code{background:#F1F5F9;padding:2px 6px;border-radius:6px}
+  .setup-steps{margin-top:10px;background:#FBFDFF;border:1px solid var(--line);border-radius:12px;padding:9px 12px}
+  .setup-steps summary{cursor:pointer;font-weight:800;color:var(--teal-d)}
+  .setup-steps ol{margin:8px 0 0;padding-left:22px}
+
+  @media (max-width:760px){
+    body{overflow:auto;height:auto}
+    .dash{grid-template-columns:1fr;grid-template-rows:none;height:auto;overflow:visible}
+    #panel-people,#panel-wall,#panel-rank,#panel-prop{grid-column:1;grid-row:auto}
+    .panel{min-height:240px}
+  }
+</style>
+</head>
+<body>
+  <div class="bar">
+    <div class="title">モヤット 先生用</div>
+    <select id="sessionSel" class="sessionsel"></select>
+    <select id="modeSel" class="sessionsel" style="flex:0 0 auto" title="このセッションで児童が取り組むモード">
+      <option value="">モード: 児童に選ばせる</option>
+      <option value="seikaku">モード: 短所・苦手な こと</option>
+      <option value="dekigoto">モード: あった できごと</option>
+    </select>
+    <span class="meta" id="meta"></span>
+    <div class="spacer"></div>
+    <button id="pauseBtn" class="btn ghost">一時停止</button>
+    <button id="refreshBtn" class="btn ghost">↻ 更新</button>
+    <button id="settingsBtn" class="btn">⚙ 設定・セッション</button>
+  </div>
+
+  <div id="needKey" class="hidden" style="padding:30px 24px">
+    <div class="panel-modal setup" style="margin:0 auto">
+      <h2>使う前の セットアップ</h2>
+      <div id="initialSetup" class="hidden">
+        <p class="muted">このコピーでは、まだ先生用の合言葉が決まっていません。最初に開いた先生が、ここで合言葉を作ってください。</p>
+        <div class="row">
+          <input id="initialAdminKey" type="text" placeholder="先生用の合言葉（8文字以上）" style="flex:1" autocomplete="off">
+          <button class="btn" id="initAdminBtn">設定する</button>
+        </div>
+        <p class="muted" id="initAdminMsg">デプロイしたら、すぐに設定してください。</p>
+        <div class="row hidden" id="newTeacherUrlRow">
+          <input class="url" id="newTeacherUrl" type="text" readonly value="">
+        </div>
+      </div>
+      <div id="wrongKeyHelp" class="hidden">
+        <p class="muted">先生用の合言葉がちがうか、URLに <code>?admin=合言葉</code> が付いていません。</p>
+        <p class="muted">例: <span id="exampleUrl2"></span>?admin=あなたの合言葉</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== リアルタイム・ダッシュボード（全部一覧／各パネル⛶で全画面） ===== -->
+  <div id="dash" class="dash hidden">
+    <section class="panel" id="panel-people">
+      <div class="phead"><h2>👥 みんなの ようす <span class="cnt" id="countLabel">0人</span></h2>
+        <div class="phead-r">
+          <span class="muted" style="font-size:.72rem">🟢活動中 🟡少し前 ⚪停止</span>
+          <button class="fsbtn" data-target="panel-people" title="全画面">⛶</button>
+        </div>
+      </div>
+      <div class="pbody"><div id="grid" class="grid"><div class="empty">セッションを 選ぶと 全員の 得点が 出ます。</div></div></div>
+    </section>
+
+    <section class="panel" id="panel-rank">
+      <div class="phead"><h2>🏆 ランキング</h2>
+        <div class="phead-r"><button class="fsbtn" data-target="panel-rank" title="全画面">⛶</button></div></div>
+      <div class="pbody"><ol id="rankList" class="top10"><li class="empty">セッションを 選んでください</li></ol></div>
+    </section>
+
+    <section class="panel" id="panel-wall">
+      <div class="phead"><h2>🌈 みんなの 見方（悩み別）</h2>
+        <div class="phead-r">
+          <div class="wall-tabs">
+            <button class="tabbtn active" id="wallTabList" type="button">見方一覧</button>
+            <button class="tabbtn" id="wallTabVotes" type="button">💖 いいなと思われた見方</button>
+          </div>
+          <button class="fsbtn" data-target="panel-wall" title="全画面">⛶</button>
+        </div></div>
+      <div class="wall-tools">
+        <label class="switch"><input type="checkbox" id="revealToggle">児童に結果を公開</label>
+        <label class="switch"><input type="checkbox" id="showNamesToggle">名前を表示（OFFのときは匿名）</label>
+      </div>
+      <div class="pbody">
+        <div id="wallListPane"><div id="wallBody"><div class="empty">児童が クリアすると、ここに 見方が 集まります。</div></div></div>
+        <div id="votePane" class="hidden"><div id="voteBody"><div class="empty">まだ いいな投票は ありません。</div></div></div>
+      </div>
+    </section>
+
+    <section class="panel" id="panel-prop">
+      <div class="phead"><h2>📝 なやみ 承認 <span class="cnt" id="propCount"></span></h2>
+        <div class="phead-r"><button class="fsbtn" data-target="panel-prop" title="全画面">⛶</button></div></div>
+      <div class="pbody" id="propBody"><div class="empty">児童が 追加した なやみが、ここに 届きます。</div></div>
+    </section>
+  </div>
+
+  <!-- 設定・セッション -->
+  <div id="overlay" class="overlay">
+    <div class="panel-modal">
+      <div class="panel-head"><h2>⚙ 設定・セッション</h2><button id="closeSettings" class="btn ghost">閉じる</button></div>
+
+      <div class="sec">
+        <h3>① AIのキー（Gemini）</h3>
+        <div class="row"><span class="muted">APIキー:</span> <span id="keyStatus" class="pill">確認中…</span>
+          <span class="muted">（<a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener">AI Studio</a> で無料取得）</span></div>
+        <div class="row" style="margin-top:8px">
+          <input id="geminiKey" type="password" placeholder="Gemini APIキーを貼り付け" style="flex:1" autocomplete="off">
+          <button class="btn" id="saveKeyBtn">保存</button>
+          <button class="btn ghost" id="testKeyBtn">テスト</button>
+        </div>
+        <details class="setup-steps">
+          <summary>はじめての設定（5ステップ）</summary>
+          <ol>
+            <li>AI StudioでAPIキーを作成します。</li>
+            <li>先生用URLを開きます。</li>
+            <li>APIキーをここに貼り付けます。</li>
+            <li>保存してから、テストを押します。</li>
+            <li>「設定済み ✅」になったら、児童が使えます。</li>
+          </ol>
+        </details>
+        <p class="muted">未設定の場合、児童の回答判定は動きません。APIキーは保存後も画面に再表示しません。</p>
+        <p class="muted" id="keyMsg"></p>
+      </div>
+
+      <div class="sec">
+        <h3>② セッションを 作る</h3>
+        <div class="row">
+          <input id="sessTitle" type="text" placeholder="セッション名（例: 5年2組 6/21）" style="flex:1">
+          <button class="btn" id="createBtn">作成</button>
+        </div>
+      </div>
+
+      <div class="sec">
+        <h3>③ 参加URL（児童に配る）</h3>
+        <div class="row"><span class="muted">あいことば</span> <span class="code" id="codeView">—</span>
+          <button class="btn warn" id="endBtn" style="margin-left:auto">このセッションを 終了</button></div>
+        <div class="row" style="margin-top:8px">
+          <input class="url" id="joinUrl" type="text" readonly value="">
+          <button class="btn ghost" id="copyBtn">コピー</button>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <span class="muted">先生用</span>
+          <input class="url" id="teacherUrl" type="text" readonly value="">
+          <button class="btn ghost" id="copyTeacherBtn">コピー</button>
+        </div>
+        <p class="muted">児童が このURLを開く → 名前を入れて 参加 → クリアで 得点・見方が この画面に 自動反映。</p>
+      </div>
+    </div>
+  </div>
+
+<script>
+const ADMIN_KEY = <?!= adminKeyJson ?>;
+const ADMIN_CONFIGURED = <?!= adminConfiguredJson ?>;
+const WEBAPP_URL = <?!= webappUrlJson ?>;
+const $ = id => document.getElementById(id);
+let currentCode = '', polling = true, timer = null;
+let wallTab = 'list';
+var _last = { people:'', rank:'', wall:'', votes:'', prop:'', flags:'' };   // 変化したパネルだけ再描画（ちらつき/操作妨げ防止）
+
+function init(){
+  if(!ADMIN_KEY){
+    $('needKey').classList.remove('hidden');
+    if(ADMIN_CONFIGURED){
+      $('wrongKeyHelp').classList.remove('hidden');
+      $('exampleUrl2').textContent = WEBAPP_URL || '（デプロイ後のWebアプリURL）';
+    }else{
+      $('initialSetup').classList.remove('hidden');
+      $('initAdminBtn').onclick = initializeAdmin;
+    }
+    $('settingsBtn').classList.add('hidden');
+    $('modeSel').classList.add('hidden');
+    return;
+  }
+  $('dash').classList.remove('hidden');
+  $('settingsBtn').onclick = () => $('overlay').classList.add('show');
+  $('closeSettings').onclick = () => $('overlay').classList.remove('show');
+  $('saveKeyBtn').onclick = saveKey;
+  $('testKeyBtn').onclick = testKey;
+  $('createBtn').onclick = doCreate;
+  $('copyBtn').onclick = copyUrl;
+  $('copyTeacherBtn').onclick = copyTeacherUrl;
+  $('endBtn').onclick = endSession;
+  $('sessionSel').onchange = onSelect;
+  $('wallTabList').onclick = function(){ setWallTab('list'); };
+  $('wallTabVotes').onclick = function(){ setWallTab('votes'); };
+  $('revealToggle').onchange = function(){ updateFlag('reveal', $('revealToggle').checked); };
+  $('showNamesToggle').onchange = function(){ updateFlag('showNames', $('showNamesToggle').checked); };
+  $('pauseBtn').onclick = togglePause;
+  $('refreshBtn').onclick = poll;
+  $('modeSel').onchange = function(){
+    if(!currentCode){ alert('先に セッションを 選んでください。'); $('modeSel').value=''; return; }
+    google.script.run.withFailureHandler(function(e){ alert('モード設定エラー: '+e.message); }).setSessionMode(ADMIN_KEY, currentCode, $('modeSel').value);
+  };
+  // ⛶ 全画面トグル（投影用）
+  Array.prototype.forEach.call(document.querySelectorAll('.fsbtn'), function(btn){
+    btn.onclick = function(){
+      var p = $(btn.getAttribute('data-target'));
+      var full = p.classList.toggle('fullscreen');
+      btn.textContent = full ? '✕' : '⛶';
+      btn.title = full ? '閉じる' : '全画面';
+    };
+  });
+  loadSettings();
+  refreshSessions();
+  startPolling();
+}
+
+function initializeAdmin(){
+  var key = ($('initialAdminKey').value || '').trim();
+  if(key.length < 8){ $('initAdminMsg').textContent = '合言葉は 8文字以上にしてください。'; return; }
+  $('initAdminBtn').disabled = true;
+  $('initAdminMsg').textContent = '設定中…';
+  google.script.run
+    .withSuccessHandler(function(r){
+      $('initAdminBtn').disabled = false;
+      $('initAdminMsg').textContent = '設定しました。下の先生用URLを開いてください。';
+      var url = (r && r.teacherUrl) ? r.teacherUrl : ((WEBAPP_URL || '') + '?admin=' + encodeURIComponent(key));
+      $('newTeacherUrl').value = url;
+      $('newTeacherUrlRow').classList.remove('hidden');
+    })
+    .withFailureHandler(function(e){
+      $('initAdminBtn').disabled = false;
+      $('initAdminMsg').textContent = '設定エラー: ' + ((e && e.message) || '');
+    })
+    .initializeAdminKey(key);
+}
+
+function setWallTab(tab){
+  wallTab = (tab === 'votes') ? 'votes' : 'list';
+  $('wallTabList').classList.toggle('active', wallTab === 'list');
+  $('wallTabVotes').classList.toggle('active', wallTab === 'votes');
+  $('wallListPane').classList.toggle('hidden', wallTab !== 'list');
+  $('votePane').classList.toggle('hidden', wallTab !== 'votes');
+}
+
+function updateFlag(name, value){
+  if(!currentCode){ alert('先に セッションを 選んでください。'); poll(); return; }
+  var flags = {}; flags[name] = value;
+  $('revealToggle').disabled = true;
+  $('showNamesToggle').disabled = true;
+  google.script.run
+    .withSuccessHandler(function(saved){
+      $('revealToggle').disabled = false;
+      $('showNamesToggle').disabled = false;
+      _last.flags = '';
+      renderFlags(saved || {});
+      poll();
+    })
+    .withFailureHandler(function(e){
+      $('revealToggle').disabled = false;
+      $('showNamesToggle').disabled = false;
+      alert('設定エラー: ' + ((e && e.message) || ''));
+      _last.flags = '';
+      poll();
+    })
+    .setSessionFlags(ADMIN_KEY, currentCode, flags);
+}
+
+// ===== 設定 =====
+function loadSettings(){
+  google.script.run.withSuccessHandler(function(s){ $('keyStatus').textContent = (s && s.geminiSet) ? '設定済み ✅' : '未設定 ⚠️'; })
+    .withFailureHandler(function(){ $('keyStatus').textContent = '取得エラー'; }).getSettings(ADMIN_KEY);
+}
+function saveKey(){
+  var k = ($('geminiKey').value || '').trim();
+  if(!k){ $('keyMsg').textContent = 'キーを貼り付けてください。'; return; }
+  $('saveKeyBtn').disabled = true; $('keyMsg').textContent = '保存中…';
+  google.script.run.withSuccessHandler(function(){ $('saveKeyBtn').disabled=false; $('geminiKey').value=''; $('keyMsg').textContent='保存しました。「テスト」で確認できます。'; loadSettings(); })
+    .withFailureHandler(function(e){ $('saveKeyBtn').disabled=false; $('keyMsg').textContent='保存エラー: '+e.message; }).setGeminiKey(ADMIN_KEY, k);
+}
+function testKey(){
+  $('testKeyBtn').disabled = true; $('keyMsg').textContent = 'テスト中…';
+  google.script.run.withSuccessHandler(function(r){ $('testKeyBtn').disabled=false; $('keyMsg').textContent = (r && r.ok) ? ('テスト成功 ✅ AIが応答しました。'+(r.model?'（'+r.model+'）':'')) : ('テスト失敗: '+((r&&r.error)||'')); })
+    .withFailureHandler(function(e){ $('testKeyBtn').disabled=false; $('keyMsg').textContent='テストエラー: '+e.message; }).testGemini(ADMIN_KEY);
+}
+function doCreate(){
+  $('createBtn').disabled = true;
+  google.script.run.withSuccessHandler(function(res){ $('createBtn').disabled=false; $('sessTitle').value=''; refreshSessions(res.code); })
+    .withFailureHandler(function(e){ $('createBtn').disabled=false; alert('作成エラー: '+e.message); }).createSession(ADMIN_KEY, $('sessTitle').value);
+}
+function refreshSessions(selectCode){
+  google.script.run.withSuccessHandler(function(list){
+    var sel = $('sessionSel'); sel.innerHTML = '';
+    if(!list.length){ var o=document.createElement('option'); o.value=''; o.textContent='（セッション無し → 設定で作成）'; sel.appendChild(o); currentCode=''; updateCode(); $('overlay').classList.add('show'); return; }
+    list.forEach(function(s){ var o=document.createElement('option'); o.value=s.code; o.textContent=(s.active?'':'[終了] ')+(s.title||'(無題)')+' / '+s.code; sel.appendChild(o); });
+    sel.value = selectCode || currentCode || list[0].code;
+    onSelect();
+  }).withFailureHandler(function(e){ alert('一覧エラー: '+e.message); }).listSessions(ADMIN_KEY);
+}
+function onSelect(){ currentCode = $('sessionSel').value || ''; updateCode(); _last={people:'',rank:'',wall:'',votes:'',prop:'',flags:''}; $('grid').innerHTML='<div class="empty">読み込み中…</div>'; poll(); }
+function updateCode(){
+  $('codeView').textContent = currentCode || '—';
+  $('joinUrl').value = (currentCode && WEBAPP_URL) ? (WEBAPP_URL+'?s='+currentCode) : '';
+  $('teacherUrl').value = WEBAPP_URL ? (WEBAPP_URL+'?admin='+encodeURIComponent(ADMIN_KEY)) : '';
+}
+function endSession(){
+  if(!currentCode) return;
+  if(!confirm(currentCode+' を 終了しますか?（児童は 参加できなくなります）')) return;
+  google.script.run.withSuccessHandler(function(){ refreshSessions(currentCode); }).withFailureHandler(function(e){ alert(e.message); }).setSessionActive(ADMIN_KEY, currentCode, false);
+}
+function copyUrl(){
+  var url=$('joinUrl').value; if(!url) return;
+  if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(url).then(function(){flash('copyBtn','コピー！');},selUrl); } else { selUrl(); }
+}
+function copyTeacherUrl(){
+  var url=$('teacherUrl').value; if(!url) return;
+  if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(url).then(function(){flash('copyTeacherBtn','コピー！');},selTeacherUrl); } else { selTeacherUrl(); }
+}
+function selUrl(){ var i=$('joinUrl'); i.removeAttribute('readonly'); i.select(); try{document.execCommand('copy');}catch(e){} i.setAttribute('readonly','readonly'); flash('copyBtn','コピー！'); }
+function selTeacherUrl(){ var i=$('teacherUrl'); i.removeAttribute('readonly'); i.select(); try{document.execCommand('copy');}catch(e){} i.setAttribute('readonly','readonly'); flash('copyTeacherBtn','コピー！'); }
+function flash(id,t){ var b=$(id); var o=b.textContent; b.textContent=t; setTimeout(function(){b.textContent=o;},1200); }
+
+// ===== ポーリング（全パネルを数秒ごとに自動更新） =====
+function startPolling(){ stopPolling(); timer=setInterval(function(){ if(polling) poll(); }, 4000); }
+function stopPolling(){ if(timer){ clearInterval(timer); timer=null; } }
+function togglePause(){ polling=!polling; $('pauseBtn').textContent = polling?'一時停止':'再開'; if(polling) poll(); }
+function poll(){
+  if(!currentCode) return;
+  google.script.run.withSuccessHandler(renderAll).withFailureHandler(function(){ $('meta').textContent='更新エラー'; }).getDashboard(ADMIN_KEY, currentCode);
+}
+function renderAll(d){
+  d = d || {};
+  var now = new Date();
+  $('meta').textContent = '自動更新 '+pad(now.getHours())+':'+pad(now.getMinutes())+':'+pad(now.getSeconds());
+  if(document.activeElement !== $('modeSel')) $('modeSel').value = d.mode || '';   // 現在のモードを反映（操作中は触らない）
+  renderPeople(d.leaderboard || []);
+  renderRank(d.leaderboard || []);
+  renderWall(d.reframes || []);
+  renderVotes(d.voteResults || []);
+  renderFlags(d.flags || {});
+  renderProps(d.proposals || []);
+}
+
+function renderFlags(flags){
+  flags = { reveal: !!(flags && flags.reveal === true), showNames: !!(flags && flags.showNames === true) };
+  var s = JSON.stringify(flags); if(s === _last.flags) return; _last.flags = s;
+  $('revealToggle').checked = flags.reveal;
+  $('showNamesToggle').checked = flags.showNames;
+}
+
+function renderPeople(list){
+  $('countLabel').textContent = list.length + '人';
+  var s = JSON.stringify(list); if(s === _last.people) return; _last.people = s;
+  if(!list.length){ $('grid').innerHTML='<div class="empty">まだ だれも 参加していません。</div>'; return; }
+  var byName = list.slice().sort(function(a,b){ return String(a.name).localeCompare(String(b.name),'ja'); });
+  $('grid').innerHTML = byName.map(function(p){
+    var cls = (p.idleSec==null) ? 'off' : (p.idleSec<60 ? 'on' : (p.idleSec<180 ? 'idle' : 'off'));
+    var idle = (p.idleSec==null) ? '—' : (p.idleSec<60 ? 'いま' : (p.idleSec<3600 ? Math.round(p.idleSec/60)+'分前' : '長め'));
+    var cur = p.currentTrouble ? esc(p.currentTrouble) : idle;
+    return '<div class="cell"><div class="nm" title="'+esc(p.name)+'">'+esc(p.name)+'</div>'
+      + '<div class="sc">☀️ '+p.score+'</div>'
+      + '<div class="st"><span class="dot '+cls+'"></span>'+cur+'</div></div>';
+  }).join('');
+}
+function renderRank(list){
+  var top = (list||[]).slice().sort(function(a,b){return b.score-a.score;}).slice(0,10);
+  var s = JSON.stringify(top); if(s === _last.rank) return; _last.rank = s;
+  if(!top.length){ $('rankList').innerHTML='<li class="empty">まだ だれも 参加していません。</li>'; return; }
+  $('rankList').innerHTML = top.map(function(p,i){
+    return '<li class="r'+(i+1)+'"><span class="rk">'+(i+1)+'</span><span class="nm">'+esc(p.name)+'</span><span class="sc">☀️ '+p.score+'</span></li>';
+  }).join('');
+}
+function renderWall(groups){
+  groups = groups || [];
+  var s = JSON.stringify(groups); if(s === _last.wall) return; _last.wall = s;
+  if(!groups.length){ $('wallBody').innerHTML='<div class="empty">まだ 共有された 見方が ありません。</div>'; return; }
+  $('wallBody').innerHTML = groups.map(function(g){
+    return '<div class="wgroup"><h3>'+esc(g.troubleLabel)+' <span class="cnt">('+g.items.length+'人)</span></h3>'
+      + g.items.map(function(it){ return '<div class="witem"><span class="who">'+esc(it.name)+'</span>「'+esc(it.reframe)+'」</div>'; }).join('')
+      + '</div>';
+  }).join('');
+}
+function renderVotes(list){
+  list = list || [];
+  var s = JSON.stringify(list); if(s === _last.votes) return; _last.votes = s;
+  if(!list.length){ $('voteBody').innerHTML='<div class="empty">まだ いいな投票は ありません。</div>'; return; }
+  $('voteBody').innerHTML = list.map(function(v){
+    var refs = [];
+    if(v.reframe1) refs.push(v.reframe1);
+    if(v.reframe2) refs.push(v.reframe2);
+    if(!refs.length && v.reframe) refs.push(v.reframe);
+    var voters = v.voters || [];
+    return '<div class="vitem">'
+      + '<div class="vtop"><span>'+esc(v.name || '（名前なし）')+'</span><span class="votes">💖 '+Number(v.votes || 0)+'</span></div>'
+      + '<div class="vmeta">'+esc(v.troubleLabel || 'なやみ')+'</div>'
+      + '<div class="vtext">「'+esc(refs.join(' / '))+'」</div>'
+      + '<details class="voters"><summary>投票した人 '+voters.length+'人</summary><div>'+voters.map(esc).join('、')+'</div></details>'
+      + '</div>';
+  }).join('');
+}
+function renderProps(list){
+  list = list || [];
+  $('propCount').textContent = list.length ? ('('+list.length+'件)') : '';
+  var s = JSON.stringify(list); if(s === _last.prop) return; _last.prop = s;
+  if(!list.length){ $('propBody').innerHTML='<div class="empty">承認待ちは ありません。</div>'; return; }
+  $('propBody').innerHTML = list.map(function(p){
+    return '<div class="pcard" data-id="'+esc(p.id)+'">'
+      + '<div class="pmeta">'+esc(p.name||'（名前なし）')+' ／ '+(p.type==='seikaku'?'短所・苦手':'できごと')+'</div>'
+      + '<div class="praw">入力: '+esc(p.rawText)+'</div>'
+      + '<div class="pfield"><b>'+esc(p.label)+'</b></div>'
+      + '<div class="pfield">'+esc(p.serihu)+'</div>'
+      + '<div class="pfield"><span>事実:</span> '+esc(p.fact)+'</div>'
+      + '<div class="pfield"><span>とらえ方:</span> '+esc(p.take)+'</div>'
+      + '<div class="pfield"><span>ヒント:</span> '+esc(p.tip)+'</div>'
+      + '<div class="prow"><button class="btn approve">承認</button><button class="btn warn reject">却下</button></div>'
+      + '</div>';
+  }).join('');
+  Array.prototype.forEach.call($('propBody').querySelectorAll('.pcard'), function(card){
+    var id = card.getAttribute('data-id');
+    card.querySelector('.approve').onclick = function(){ setProp(id, 'approved', card); };
+    card.querySelector('.reject').onclick = function(){ setProp(id, 'rejected', card); };
+  });
+}
+function setProp(id, status, card){
+  Array.prototype.forEach.call(card.querySelectorAll('button'), function(b){ b.disabled = true; });
+  google.script.run
+    .withSuccessHandler(function(){ card.querySelector('.prow').outerHTML = '<div class="pdone">'+(status==='approved'?'✅ 承認しました（みんなの 悩みに 追加）':'却下しました')+'</div>'; _last.prop=''; setTimeout(poll, 600); })
+    .withFailureHandler(function(e){ alert('エラー: '+e.message); Array.prototype.forEach.call(card.querySelectorAll('button'), function(b){ b.disabled = false; }); })
+    .setProposalStatus(ADMIN_KEY, id, status);
+}
+
+function pad(n){ return (n<10?'0':'')+n; }
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+init();
+</script>
+</body>
+</html>
