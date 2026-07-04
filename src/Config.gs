@@ -39,7 +39,7 @@ function hasApiKey_() {
 // 自分の GEMINI_API_KEY があればそれで直接 Gemini を呼ぶ。無い場合でも、先生画面で
 // 「お試しキーで始める」を選ぶと TRIAL_MODE=on になり、配布元の中継サーバ経由で動く。
 // お試しキー本体は中継サーバの Script Properties にだけあり、このソースには含まれない。
-// 中継側の上限: 全アプリ合計 500回/日・1アプリ 200回/日。
+// 中継側の上限: 全アプリ合計 800回/日・1アプリ 400回/日。
 var TRIAL_PROXY_URL = 'https://script.google.com/macros/s/AKfycbxmWwg7nOJCJzwf7N6KaffFayovwGUA9h1-0py8UNfnPBllb4-JOOUZMuhi6ukdX7fR/exec';
 
 /** お試しモードが有効か（自分のキーが無く、TRIAL_MODE がonのとき）。 */

@@ -214,7 +214,7 @@
       <div id="wizStep2">
         <div style="background:#FFF8E4;border:1.5px solid #F1DE9E;border-radius:12px;padding:10px 12px;margin:6px 0 12px">
           <p style="margin:0 0 8px"><b>⚡ いちばん簡単:</b> 配布元が用意した<b>お試しキー</b>で、今すぐ始められます。<br>
-            <span class="muted">（全利用校の合計で1日500回まで。まず体験する用です。キーの入力は不要）</span></p>
+            <span class="muted">（1アプリ1日400回・全利用校合計800回まで。まず体験する用です。キーの入力は不要）</span></p>
           <button class="btn" id="wizTrialBtn">お試しキーで すぐ始める</button>
           <p class="wiz-msg" id="wizTrialMsg"></p>
         </div>
@@ -460,7 +460,7 @@ function updateFlag(name, value){
 function loadSettings(){
   google.script.run.withSuccessHandler(function(s){
     if(s && s.geminiSet){ $('keyStatus').textContent = '設定済み ✅'; }
-    else if(s && s.trial){ $('keyStatus').textContent = 'お試しキー使用中 ⚡（共有・1日500回まで）'; }
+    else if(s && s.trial){ $('keyStatus').textContent = 'お試しキー使用中 ⚡（1日400回まで・共有）'; }
     else { $('keyStatus').textContent = '未設定 ⚠️'; }
     if(!(s && (s.geminiSet || s.trial))) showWizard();   // AIが使えない状態なら、はじめてウィザードで1本道に案内
   })
@@ -500,7 +500,7 @@ function wizStartTrial(){
       $('wizTrialBtn').disabled = false;
       if(r && r.ok){
         $('wizTrialMsg').textContent = '';
-        wizAdvanceToStep3('お試しキー使用中 ⚡（共有・1日500回まで）');
+        wizAdvanceToStep3('お試しキー使用中 ⚡（1日400回まで・共有）');
       }else{
         $('wizTrialMsg').textContent = 'お試しキーに つながりませんでした: ' + ((r && r.error) || '') + ' 下の「自分のキー」でも始められます。';
       }
