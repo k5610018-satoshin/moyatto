@@ -35,6 +35,46 @@ function hasApiKey_() {
   return !!PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
 }
 
+// ===== お試しキー中継（トライアルモード） =====
+// 自分の GEMINI_API_KEY があればそれで直接 Gemini を呼ぶ。無い場合でも、先生画面で
+// 「お試しキーで始める」を選ぶと TRIAL_MODE=on になり、配布元の中継サーバ経由で動く。
+// お試しキー本体は中継サーバの Script Properties にだけあり、このソースには含まれない。
+// 中継側の上限: 全アプリ合計 500回/日・1アプリ 200回/日。
+var TRIAL_PROXY_URL = 'https://script.google.com/macros/s/AKfycbxmWwg7nOJCJzwf7N6KaffFayovwGUA9h1-0py8UNfnPBllb4-JOOUZMuhi6ukdX7fR/exec';
+
+/** お試しモードが有効か（自分のキーが無く、TRIAL_MODE がonのとき）。 */
+function isTrialActive_() {
+  var p = PropertiesService.getScriptProperties();
+  return !p.getProperty('GEMINI_API_KEY') && p.getProperty('TRIAL_MODE') === 'on';
+}
+
+/**
+ * Gemini generateContent を呼ぶ共通経路（直接 or お試し中継）。
+ * 混雑時(429/500/503)は一呼吸おいて1回だけ再試行する（30人同時アクセスの渋滞対策）。
+ * 返り値は UrlFetchApp のレスポンス。
+ */
+function geminiRequest_(body) {
+  var url, payload;
+  if (hasApiKey_()) {
+    url = 'https://generativelanguage.googleapis.com/v1beta/models/' +
+      encodeURIComponent(MODEL) + ':generateContent?key=' + encodeURIComponent(getApiKey_());
+    payload = JSON.stringify(body);
+  } else if (isTrialActive_()) {
+    url = TRIAL_PROXY_URL;
+    payload = JSON.stringify({ client: ScriptApp.getScriptId().slice(0, 24), payload: body });
+  } else {
+    throw new Error('GEMINI_API_KEY が未設定です。先生用ダッシュボードの「設定」から登録してください。');
+  }
+  var opts = { method: 'post', contentType: 'application/json', payload: payload, muteHttpExceptions: true };
+  var res = UrlFetchApp.fetch(url, opts);
+  var code = res.getResponseCode();
+  if (code === 429 || code === 500 || code === 503) {
+    Utilities.sleep(600 + Math.floor(Math.random() * 900));
+    res = UrlFetchApp.fetch(url, opts);
+  }
+  return res;
+}
+
 // ===== モード（2デッキ） =====
 var MODES = [
   { id: 'seikaku',  emo: '🙍', label: '短所・苦手な こと', hint: '「こんな 自分、いやだな」を たすける' },

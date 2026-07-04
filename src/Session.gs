@@ -151,7 +151,15 @@ function setSessionActive(adminKey, code, active) {
 function getSettings(adminKey) {
   requireAdmin_(adminKey);
   var props = PropertiesService.getScriptProperties();
-  return { geminiSet: !!props.getProperty('GEMINI_API_KEY'), model: MODEL, adminKeySet: !!props.getProperty('ADMIN_KEY') };
+  var geminiSet = !!props.getProperty('GEMINI_API_KEY');
+  var trial = !geminiSet && props.getProperty('TRIAL_MODE') === 'on';
+  return {
+    geminiSet: geminiSet,
+    trial: trial,
+    aiReady: geminiSet || trial,
+    model: MODEL,
+    adminKeySet: !!props.getProperty('ADMIN_KEY')
+  };
 }
 
 /** Gemini APIキーを保存。adminKey 必須。先生が管理画面から入力する。 */
@@ -159,7 +167,20 @@ function setGeminiKey(adminKey, key) {
   requireAdmin_(adminKey);
   key = String(key || '').trim();
   if (!key) throw new Error('キーが空です。');
-  PropertiesService.getScriptProperties().setProperty('GEMINI_API_KEY', key);
+  var props = PropertiesService.getScriptProperties();
+  props.setProperty('GEMINI_API_KEY', key);
+  props.deleteProperty('TRIAL_MODE');   // 自分のキーを入れたら、お試しモードは終了
+  return { ok: true };
+}
+
+/** お試しキー（配布元の中継サーバ経由）で使い始める。adminKey 必須。 */
+function enableTrialMode(adminKey) {
+  requireAdmin_(adminKey);
+  var props = PropertiesService.getScriptProperties();
+  if (props.getProperty('GEMINI_API_KEY')) {
+    return { ok: true, note: '自分のAPIキーが設定済みのため、そちらを使います。' };
+  }
+  props.setProperty('TRIAL_MODE', 'on');
   return { ok: true };
 }
 
@@ -170,11 +191,11 @@ function setGeminiKey(adminKey, key) {
  */
 function testGemini(adminKey) {
   requireAdmin_(adminKey);
-  var key = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
-  if (!key) return { ok: false, error: 'APIキーが まだ 設定されていません。' };
+  var props = PropertiesService.getScriptProperties();
+  var hasKey = !!props.getProperty('GEMINI_API_KEY');
+  var trial = !hasKey && props.getProperty('TRIAL_MODE') === 'on';
+  if (!hasKey && !trial) return { ok: false, error: 'APIキーが まだ 設定されていません。' };
   try {
-    var url = 'https://generativelanguage.googleapis.com/v1beta/models/' +
-              encodeURIComponent(MODEL) + ':generateContent?key=' + encodeURIComponent(key);
     var body = {
       systemInstruction: { parts: [{ text: 'あなたはテスト用アシスタント。cleared=true, reply="OK" を返して。' }] },
       contents: [{ role: 'user', parts: [{ text: 'テスト' }] }],
@@ -189,13 +210,18 @@ function testGemini(adminKey) {
         thinkingConfig: thinkingConfig_()
       }
     };
-    var res = UrlFetchApp.fetch(url, {
-      method: 'post', contentType: 'application/json',
-      payload: JSON.stringify(body), muteHttpExceptions: true
-    });
+    var res = geminiRequest_(body);
     var code = res.getResponseCode();
-    if (code === 200) return { ok: true, model: MODEL };
-    return { ok: false, error: 'モデル「' + MODEL + '」 HTTP ' + code + ': ' + String(res.getContentText()).slice(0, 240) };
+    var data = null;
+    try { data = JSON.parse(res.getContentText()); } catch (e2) {}
+    // お試し中継はHTTP 200で {error:{...}} を返すため、本文の candidates まで確認する
+    if (code === 200 && data && data.candidates) {
+      return { ok: true, model: MODEL + (trial ? '（お試しキー）' : '') };
+    }
+    var detail = (data && data.error && data.error.message)
+      ? data.error.message
+      : String(res.getContentText()).slice(0, 240);
+    return { ok: false, error: 'モデル「' + MODEL + '」 HTTP ' + code + ': ' + detail };
   } catch (e) {
     return { ok: false, error: String(e) };
   }

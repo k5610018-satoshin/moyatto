@@ -212,7 +212,13 @@
       </div>
 
       <div id="wizStep2">
-        <p style="margin:6px 0"><b>Gemini APIキー</b>（無料）を貼り付けます。
+        <div style="background:#FFF8E4;border:1.5px solid #F1DE9E;border-radius:12px;padding:10px 12px;margin:6px 0 12px">
+          <p style="margin:0 0 8px"><b>⚡ いちばん簡単:</b> 配布元が用意した<b>お試しキー</b>で、今すぐ始められます。<br>
+            <span class="muted">（全利用校の合計で1日500回まで。まず体験する用です。キーの入力は不要）</span></p>
+          <button class="btn" id="wizTrialBtn">お試しキーで すぐ始める</button>
+          <p class="wiz-msg" id="wizTrialMsg"></p>
+        </div>
+        <p style="margin:6px 0"><b>じっくり使うなら:</b> 自分の <b>Gemini APIキー</b>（無料で作れます・回数制限なし）を貼り付けます。
           <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener">AI Studio でキーを作る（別タブで開きます）</a></p>
         <div class="row">
           <input id="wizKey" type="password" placeholder="作ったAPIキーを ここに貼り付け" style="flex:1" autocomplete="off">
@@ -453,8 +459,10 @@ function updateFlag(name, value){
 // ===== 設定 =====
 function loadSettings(){
   google.script.run.withSuccessHandler(function(s){
-    $('keyStatus').textContent = (s && s.geminiSet) ? '設定済み ✅' : '未設定 ⚠️';
-    if(!(s && s.geminiSet)) showWizard();   // APIキー未設定なら、はじめてウィザードで1本道に案内
+    if(s && s.geminiSet){ $('keyStatus').textContent = '設定済み ✅'; }
+    else if(s && s.trial){ $('keyStatus').textContent = 'お試しキー使用中 ⚡（共有・1日500回まで）'; }
+    else { $('keyStatus').textContent = '未設定 ⚠️'; }
+    if(!(s && (s.geminiSet || s.trial))) showWizard();   // AIが使えない状態なら、はじめてウィザードで1本道に案内
   })
     .withFailureHandler(function(){ $('keyStatus').textContent = '取得エラー'; }).getSettings(ADMIN_KEY);
 }
@@ -466,6 +474,7 @@ function showWizard(){
   wizardActive = true;
   $('wizard').classList.remove('hidden');
   $('wizKeyBtn').onclick = wizSaveAndTest;
+  $('wizTrialBtn').onclick = wizStartTrial;
   $('wizSessBtn').onclick = wizCreateSession;
   $('wizCopyBtn').onclick = function(){
     var el = $('wizJoinUrl'); el.select();
@@ -475,6 +484,36 @@ function showWizard(){
   $('wizSkip').onclick = function(ev){ ev.preventDefault(); hideWizard(); };
 }
 function hideWizard(){ wizardActive = false; $('wizard').classList.add('hidden'); }
+function wizAdvanceToStep3(statusText){
+  $('keyStatus').textContent = statusText;
+  var c2 = $('wizStep2Chip'); c2.classList.remove('now'); c2.classList.add('done'); c2.textContent = '2. AIのキー ✅';
+  $('wizStep3Chip').classList.add('now');
+  $('wizStep2').classList.add('hidden');
+  $('wizStep3').classList.remove('hidden');
+}
+
+function wizStartTrial(){
+  $('wizTrialBtn').disabled = true; $('wizTrialMsg').textContent = 'お試しキーを 準備しています…';
+  google.script.run.withSuccessHandler(function(){
+    $('wizTrialMsg').textContent = 'AIの動作をテストしています…（10秒ほど待ってね）';
+    google.script.run.withSuccessHandler(function(r){
+      $('wizTrialBtn').disabled = false;
+      if(r && r.ok){
+        $('wizTrialMsg').textContent = '';
+        wizAdvanceToStep3('お試しキー使用中 ⚡（共有・1日500回まで）');
+      }else{
+        $('wizTrialMsg').textContent = 'お試しキーに つながりませんでした: ' + ((r && r.error) || '') + ' 下の「自分のキー」でも始められます。';
+      }
+    }).withFailureHandler(function(e){
+      $('wizTrialBtn').disabled = false;
+      $('wizTrialMsg').textContent = 'テストエラー: ' + ((e && e.message) || '');
+    }).testGemini(ADMIN_KEY);
+  }).withFailureHandler(function(e){
+    $('wizTrialBtn').disabled = false;
+    $('wizTrialMsg').textContent = 'エラー: ' + ((e && e.message) || '');
+  }).enableTrialMode(ADMIN_KEY);
+}
+
 function wizSaveAndTest(){
   var k = ($('wizKey').value || '').trim();
   if(!k){ $('wizKeyMsg').textContent = 'APIキーを貼り付けてください。'; return; }
@@ -486,11 +525,7 @@ function wizSaveAndTest(){
       if(r && r.ok){
         $('wizKey').value = '';
         $('wizKeyMsg').textContent = '';
-        $('keyStatus').textContent = '設定済み ✅';
-        var c2 = $('wizStep2Chip'); c2.classList.remove('now'); c2.classList.add('done'); c2.textContent = '2. AIのキー ✅';
-        $('wizStep3Chip').classList.add('now');
-        $('wizStep2').classList.add('hidden');
-        $('wizStep3').classList.remove('hidden');
+        wizAdvanceToStep3('設定済み ✅');
       }else{
         $('wizKeyMsg').textContent = 'テスト失敗: ' + ((r && r.error) || '') + ' キーをもう一度確認してください。';
       }

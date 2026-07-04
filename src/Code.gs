@@ -12,7 +12,7 @@
 // 入力の上限（濫用・トークン肥大の抑制）
 var MAX_MESSAGES = 16;        // 直近この件数だけGeminiに送る
 var MAX_TEXT_LEN = 1000;      // 1発言の最大文字数
-var RATE_PER_MIN = 120;       // 全体で1分あたりの上限呼び出し回数（超過は静かにフォールバック）
+var RATE_PER_MIN = 600;       // 全体で1分あたりの上限呼び出し回数（超過は静かにフォールバック）。30人同時授業でも届かない値にしつつ、ボット的な濫用は止める
 
 function doGet(e) {
   e = e || {};
@@ -274,16 +274,18 @@ function isHeavyTopic_(text) {
   return false;
 }
 
-/** 全体で1分あたりの呼び出し回数を制限する（匿名公開時の濫用抑制）。失敗時は通す。 */
+/**
+ * 全体で1分あたりの呼び出し回数を制限する（匿名公開時の濫用抑制）。失敗時は通す。
+ * ※ 以前はここで ScriptLock を取っていたが、30人同時アクセス時に全リクエストが
+ *    ロック待ちで直列化して「渋滞」の原因になったため、ロックなしで運用する。
+ *    競合でカウントが数件ズレても、桁違いの濫用を止める目的には影響しない。
+ */
 function isRateLimited_() {
   try {
     var cache = CacheService.getScriptCache();
     var bucket = 'rl_' + Math.floor(Date.now() / 60000);
-    var lock = LockService.getScriptLock();
-    lock.waitLock(2000);
     var n = parseInt(cache.get(bucket) || '0', 10) + 1;
     cache.put(bucket, String(n), 90);  // 90秒で自然消滅
-    lock.releaseLock();
     return n > RATE_PER_MIN;
   } catch (e) {
     return false;  // 制限器の不調で正規利用を止めない
@@ -301,10 +303,6 @@ function thinkingConfig_() {
 /** Gemini generateContent を呼び構造化判定を返す。失敗時はクリアにしない。 */
 function callGemini_(systemText, contents) {
   var firstTurn = contents.length <= 1;
-  var url = 'https://generativelanguage.googleapis.com/v1beta/models/' +
-            encodeURIComponent(MODEL) + ':generateContent?key=' +
-            encodeURIComponent(getApiKey_());
-
   var body = {
     systemInstruction: { parts: [{ text: systemText }] },
     contents: contents,
@@ -334,12 +332,7 @@ function callGemini_(systemText, contents) {
   };
 
   try {
-    var res = UrlFetchApp.fetch(url, {
-      method: 'post',
-      contentType: 'application/json',
-      payload: JSON.stringify(body),
-      muteHttpExceptions: true
-    });
+    var res = geminiRequest_(body);
     if (res.getResponseCode() !== 200) {
       return friendlyFallback_(firstTurn);
     }
@@ -422,8 +415,6 @@ function obviouslyShallow_(text, trouble) {
  */
 function geminiJson_(systemText, contents, schema, fallback) {
   try {
-    var url = 'https://generativelanguage.googleapis.com/v1beta/models/' +
-      encodeURIComponent(MODEL) + ':generateContent?key=' + encodeURIComponent(getApiKey_());
     var body = {
       systemInstruction: { parts: [{ text: systemText }] },
       contents: contents,
@@ -440,10 +431,7 @@ function geminiJson_(systemText, contents, schema, fallback) {
         { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' }
       ]
     };
-    var res = UrlFetchApp.fetch(url, {
-      method: 'post', contentType: 'application/json',
-      payload: JSON.stringify(body), muteHttpExceptions: true
-    });
+    var res = geminiRequest_(body);
     if (res.getResponseCode() !== 200) return fallback;
     var data = JSON.parse(res.getContentText());
     var cand = data.candidates && data.candidates[0];
