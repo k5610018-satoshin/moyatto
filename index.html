@@ -42,6 +42,8 @@
   code{background:#EEF4F8;border-radius:6px;padding:1px 7px;font-size:.9em;word-break:break-all}
   pre.prompt{background:#F7FAFC;border:1.5px solid var(--line);border-radius:12px;padding:14px;max-height:340px;overflow:auto;
     white-space:pre-wrap;font-family:inherit;font-size:.85rem;line-height:1.6;margin:10px 0}
+  img.guide{display:block;width:100%;max-width:660px;margin:10px auto 22px;border:1.5px solid var(--line);
+    border-radius:12px;box-shadow:0 4px 12px rgba(61,100,130,.06)}
   .copy-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
   .copy-ok{color:#2E7D48;font-weight:700;font-size:.9rem;min-height:1.3em}
   table{border-collapse:collapse;width:100%;font-size:.92rem;margin-top:8px}
@@ -101,26 +103,25 @@
     <h2>① GAS版のセットアップ（コピーするだけ・約5分）</h2>
     <p>ファイルの貼り付け作業はありません。<b>コピー → デプロイ → 画面の案内に従う</b>の3ステップです。</p>
 
-    <h3>STEP 1. プロジェクトをコピーする（30秒）</h3>
-    <ol class="steps">
-      <li>Googleにログインした状態で、<a href="https://script.google.com/d/1z31SLzxlT6xVxuL_vfOCMmU-GczQuKrDO75Ez2sMbbQVjAeYtHNqDlTt/edit" target="_blank" rel="noopener"><b>配布プロジェクト「モヤット」を開く</b></a>（閲覧専用で開きます）。</li>
-      <li>画面上部の「<b>コピーを作成</b>」アイコン（📄が2枚重なったマーク）を押します。自分のアカウントにコピーができます。</li>
-    </ol>
+    <h3>STEP 1. コピーする（30秒）</h3>
+    <p><a href="https://script.google.com/d/1z31SLzxlT6xVxuL_vfOCMmU-GczQuKrDO75Ez2sMbbQVjAeYtHNqDlTt/edit" target="_blank" rel="noopener"><b>配布プロジェクト「モヤット」を開き</b></a>、右上の「コピーを作成」を押すだけ。</p>
+    <img class="guide" src="assets/guide/guide1_copy.png" alt="画面上部の「コピーを作成」アイコンを押す" loading="lazy">
 
-    <h3>STEP 2. ウェブアプリとしてデプロイする（2分）</h3>
-    <ol class="steps">
-      <li>コピーしたプロジェクトで「<b>デプロイ → 新しいデプロイ</b>」→ 歯車から種類「<b>ウェブアプリ</b>」を選択。</li>
-      <li>「次のユーザーとして実行」＝<b>自分</b> ／「アクセスできるユーザー」＝<b>全員</b>（児童がログイン不要になります）→「デプロイ」。</li>
-      <li>「アクセスを承認」を求められたら自分のアカウントを選びます。<b>「このアプリは Google で確認されていません」と出ても大丈夫</b>——自分で作ったアプリに自分が許可を出す画面です。「<b>詳細</b>」→「<b>（安全ではないページ）に移動</b>」→「<b>許可</b>」と進んでください。</li>
-      <li>表示された「ウェブアプリのURL」をコピーします。</li>
-    </ol>
+    <h3>STEP 2. デプロイする（2分）</h3>
+    <p>コピーした自分のプロジェクトで、右上の「デプロイ」→「新しいデプロイ」。</p>
+    <img class="guide" src="assets/guide/guide2_deploy.png" alt="デプロイから新しいデプロイを選ぶ" loading="lazy">
+    <p>種類「ウェブアプリ」／ アクセスできるユーザーを<b>「全員」</b>にして「デプロイ」。</p>
+    <img class="guide" src="assets/guide/guide3_webapp.png" alt="ウェブアプリを選び、アクセスを全員にしてデプロイ" loading="lazy">
+    <p>とちゅうで出る確認画面は、そのまま進んで大丈夫です。</p>
+    <img class="guide" src="assets/guide/guide4_auth.png" alt="確認画面は詳細→移動→許可の順に進む" loading="lazy">
+    <p>最後に表示される「<b>ウェブアプリのURL</b>」をコピーします。</p>
 
-    <h3>STEP 3. 開いて、画面の案内どおりに設定する（2分）</h3>
-    <ol class="steps">
-      <li>ウェブアプリURLの末尾に <code>?admin=setup</code> を付けて開きます。</li>
-      <li>先生用の合言葉（8文字以上）を決めます → 表示された先生用URLを<b>ブックマークしてから</b>「開く」。</li>
-      <li>あとは画面の「🚀 はじめての設定」が1本道で案内します。<b>AIのキーは「⚡ お試しキーで すぐ始める」を押せば入力不要</b>（1アプリ1日400回・全利用校合計800回まで）。じっくり使うときは自分のキー（<a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener">AI Studio</a>で無料作成・回数制限なし）に切り替えられます。→ セッション作成 → 児童用URLをコピーで完成です🎉</li>
-    </ol>
+    <h3>STEP 3. 開いて設定する（2分）</h3>
+    <p>URLの末尾に <code>?admin=setup</code> を付けて開き、先生用の合言葉を決めます。</p>
+    <img class="guide" src="assets/guide/guide5_setup.png" alt="先生用の合言葉を設定する画面" loading="lazy">
+    <p>表示された先生用URLを<b>ブックマークして</b>開くと、「🚀 はじめての設定」が1本道で案内します。「⚡ お試しキー」を押せば<b>APIキーの入力も不要</b>（1アプリ1日400回・全体800回まで。じっくり使うときは<a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener">自分のキー</a>に切替）。</p>
+    <img class="guide" src="assets/guide/guide6_wizard.png" alt="はじめての設定ウィザード。お試しキーですぐ始めるボタン" loading="lazy">
+    <p>セッションを作って児童用URLを配れば完成です🎉</p>
 
     <details>
       <summary>うまくいかないとき（よくあるつまずき）</summary>
