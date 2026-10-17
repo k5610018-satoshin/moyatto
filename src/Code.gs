@@ -62,8 +62,7 @@ function doPost(e) {
   if (action === 'setGeminiKey' && getAdminKey_() && adminKey === getAdminKey_()) {
     var key = String(p.key || body.key || '').trim();
     if (!key) return jsonOutput_({ ok: false, message: 'key is empty' });
-    PropertiesService.getScriptProperties().setProperty('GEMINI_API_KEY', key);
-    return jsonOutput_({ ok: true, geminiSet: true });
+    return jsonOutput_(setAiKey(adminKey, key));
   }
   if (getAdminKey_() && adminKey === getAdminKey_()) {
     if (action === 'askMoyatto') {
@@ -149,7 +148,7 @@ function askMoyatto(payload) {
   }
 
   // AIキー未設定のときは、誤解を生む「聞き返し」や偽の「解決」でなく、先生に分かる明確な案内を返す。
-  if (!hasApiKey_()) {
+  if (!hasApiKey_() && !isTrialActive_()) {
     return result_(false, 0, [], '', '先生が AIの じゅんびを しているよ。先生に つたえてね。');
   }
 
@@ -302,6 +301,7 @@ function thinkingConfig_() {
 
 /** Gemini generateContent を呼び構造化判定を返す。失敗時はクリアにしない。 */
 function callGemini_(systemText, contents) {
+  if (getAiProvider_() === 'openai') return callOpenAi_(systemText, contents);
   var firstTurn = contents.length <= 1;
   var body = {
     systemInstruction: { parts: [{ text: systemText }] },
@@ -414,6 +414,7 @@ function obviouslyShallow_(text, trouble) {
  * askMoyatto の callGemini_ とは別系統（{cleared,reply} 以外: もっとヒント / 悩み構造化）。
  */
 function geminiJson_(systemText, contents, schema, fallback) {
+  if (getAiProvider_() === 'openai') return openAiJson_(systemText, contents, schema, fallback);
   try {
     var body = {
       systemInstruction: { parts: [{ text: systemText }] },
