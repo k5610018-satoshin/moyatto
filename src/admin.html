@@ -218,8 +218,8 @@
           <button class="btn" id="wizTrialBtn">お試しキーで すぐ始める</button>
           <p class="wiz-msg" id="wizTrialMsg"></p>
         </div>
-        <p style="margin:6px 0"><b>じっくり使うなら:</b> 自分の <b>Gemini APIキー</b>（無料で作れます・回数制限なし）を貼り付けます。
-          <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener">AI Studio でキーを作る（別タブで開きます）</a></p>
+        <p style="margin:6px 0"><b>自分のキーを使う:</b> <b>OpenAI または Gemini のAPIキー</b>を貼り付けます。
+          OpenAIのキーを保存すると、<b>GPT-6 Luna（推論 medium）</b>へ切り替わります。APIの利用料金は各アカウントに発生します。</p>
         <div class="row">
           <input id="wizKey" type="password" placeholder="作ったAPIキーを ここに貼り付け" style="flex:1" autocomplete="off">
           <button class="btn" id="wizKeyBtn">保存してテスト</button>
@@ -298,22 +298,22 @@
       <div class="panel-head"><h2>⚙ 設定・セッション</h2><button id="closeSettings" class="btn ghost">閉じる</button></div>
 
       <div class="sec">
-        <h3>① AIのキー（Gemini）</h3>
-        <div class="row"><span class="muted">APIキー:</span> <span id="keyStatus" class="pill">確認中…</span>
-          <span class="muted">（<a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener">AI Studio</a> で無料取得）</span></div>
+        <h3>① AIのキー</h3>
+        <div class="row"><span class="muted">使用するAI:</span> <span id="keyStatus" class="pill">確認中…</span></div>
+        <p class="muted">OpenAIのキーを保存すると GPT-6 Luna（推論 medium）を使います。キーはサーバーに保存され、児童の画面には渡しません。</p>
         <div class="row" style="margin-top:8px">
-          <input id="geminiKey" type="password" placeholder="Gemini APIキーを貼り付け" style="flex:1" autocomplete="off">
+          <input id="geminiKey" type="password" placeholder="OpenAI / Gemini APIキーを貼り付け" style="flex:1" autocomplete="off">
           <button class="btn" id="saveKeyBtn">保存</button>
           <button class="btn ghost" id="testKeyBtn">テスト</button>
         </div>
         <details class="setup-steps">
           <summary>はじめての設定（5ステップ）</summary>
           <ol>
-            <li>AI StudioでAPIキーを作成します。</li>
+            <li>利用するAIの管理画面でAPIキーを用意します。</li>
             <li>先生用URLを開きます。</li>
             <li>APIキーをここに貼り付けます。</li>
             <li>保存してから、テストを押します。</li>
-            <li>「設定済み ✅」になったら、児童が使えます。</li>
+            <li>使用するAIと「テスト成功 ✅」が表示されたら、児童が使えます。</li>
           </ol>
         </details>
         <p class="muted">未設定の場合、児童の回答判定は動きません。APIキーは保存後も画面に再表示しません。</p>
@@ -459,12 +459,16 @@ function updateFlag(name, value){
 // ===== 設定 =====
 function loadSettings(){
   google.script.run.withSuccessHandler(function(s){
-    if(s && s.geminiSet){ $('keyStatus').textContent = '設定済み ✅'; }
+    if(s && s.aiReady && !s.trial){ $('keyStatus').textContent = aiStatusText(s); }
     else if(s && s.trial){ $('keyStatus').textContent = 'お試しキー使用中 ⚡（1日400回まで・共有）'; }
     else { $('keyStatus').textContent = '未設定 ⚠️'; }
-    if(!(s && (s.geminiSet || s.trial))) showWizard();   // AIが使えない状態なら、はじめてウィザードで1本道に案内
+    if(!(s && s.aiReady)) showWizard();
   })
     .withFailureHandler(function(){ $('keyStatus').textContent = '取得エラー'; }).getSettings(ADMIN_KEY);
+}
+
+function aiStatusText(s){
+  return (s.model || 'AI') + (s.reasoningEffort ? ' / ' + s.reasoningEffort : '') + ' 設定済み ✅';
 }
 
 // ===== はじめてウィザード =====
@@ -507,7 +511,7 @@ function wizStartTrial(){
     }).withFailureHandler(function(e){
       $('wizTrialBtn').disabled = false;
       $('wizTrialMsg').textContent = 'テストエラー: ' + ((e && e.message) || '');
-    }).testGemini(ADMIN_KEY);
+    }).testAi(ADMIN_KEY);
   }).withFailureHandler(function(e){
     $('wizTrialBtn').disabled = false;
     $('wizTrialMsg').textContent = 'エラー: ' + ((e && e.message) || '');
@@ -525,18 +529,18 @@ function wizSaveAndTest(){
       if(r && r.ok){
         $('wizKey').value = '';
         $('wizKeyMsg').textContent = '';
-        wizAdvanceToStep3('設定済み ✅');
+        wizAdvanceToStep3(aiStatusText(r));
       }else{
         $('wizKeyMsg').textContent = 'テスト失敗: ' + ((r && r.error) || '') + ' キーをもう一度確認してください。';
       }
     }).withFailureHandler(function(e){
       $('wizKeyBtn').disabled = false;
       $('wizKeyMsg').textContent = 'テストエラー: ' + ((e && e.message) || '');
-    }).testGemini(ADMIN_KEY);
+    }).testAi(ADMIN_KEY);
   }).withFailureHandler(function(e){
     $('wizKeyBtn').disabled = false;
     $('wizKeyMsg').textContent = '保存エラー: ' + ((e && e.message) || '');
-  }).setGeminiKey(ADMIN_KEY, k);
+  }).setAiKey(ADMIN_KEY, k);
 }
 function wizCreateSession(){
   $('wizSessBtn').disabled = true; $('wizSessMsg').textContent = '作成中…';
@@ -556,12 +560,12 @@ function saveKey(){
   if(!k){ $('keyMsg').textContent = 'キーを貼り付けてください。'; return; }
   $('saveKeyBtn').disabled = true; $('keyMsg').textContent = '保存中…';
   google.script.run.withSuccessHandler(function(){ $('saveKeyBtn').disabled=false; $('geminiKey').value=''; $('keyMsg').textContent='保存しました。「テスト」で確認できます。'; loadSettings(); })
-    .withFailureHandler(function(e){ $('saveKeyBtn').disabled=false; $('keyMsg').textContent='保存エラー: '+e.message; }).setGeminiKey(ADMIN_KEY, k);
+    .withFailureHandler(function(e){ $('saveKeyBtn').disabled=false; $('keyMsg').textContent='保存エラー: '+e.message; }).setAiKey(ADMIN_KEY, k);
 }
 function testKey(){
   $('testKeyBtn').disabled = true; $('keyMsg').textContent = 'テスト中…';
-  google.script.run.withSuccessHandler(function(r){ $('testKeyBtn').disabled=false; $('keyMsg').textContent = (r && r.ok) ? ('テスト成功 ✅ AIが応答しました。'+(r.model?'（'+r.model+'）':'')) : ('テスト失敗: '+((r&&r.error)||'')); })
-    .withFailureHandler(function(e){ $('testKeyBtn').disabled=false; $('keyMsg').textContent='テストエラー: '+e.message; }).testGemini(ADMIN_KEY);
+  google.script.run.withSuccessHandler(function(r){ $('testKeyBtn').disabled=false; $('keyMsg').textContent = (r && r.ok) ? ('テスト成功 ✅ AIが応答しました。'+(r.model?'（'+r.model+(r.reasoningEffort?' / '+r.reasoningEffort:'')+'）':'')) : ('テスト失敗: '+((r&&r.error)||'')); })
+    .withFailureHandler(function(e){ $('testKeyBtn').disabled=false; $('keyMsg').textContent='テストエラー: '+e.message; }).testAi(ADMIN_KEY);
 }
 function doCreate(){
   $('createBtn').disabled = true;

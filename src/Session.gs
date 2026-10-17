@@ -152,34 +152,34 @@ function getSettings(adminKey) {
   requireAdmin_(adminKey);
   var props = PropertiesService.getScriptProperties();
   var geminiSet = !!props.getProperty('GEMINI_API_KEY');
-  var trial = !geminiSet && props.getProperty('TRIAL_MODE') === 'on';
+  var openaiSet = !!props.getProperty('OPENAI_API_KEY');
+  var provider = getAiProvider_();
+  var trial = isTrialActive_();
   return {
     geminiSet: geminiSet,
+    openaiSet: openaiSet,
+    provider: provider,
     trial: trial,
-    aiReady: geminiSet || trial,
-    model: MODEL,
+    aiReady: hasApiKey_() || trial,
+    model: getAiModel_(),
+    reasoningEffort: provider === 'openai' ? OPENAI_REASONING_EFFORT : '',
     adminKeySet: !!props.getProperty('ADMIN_KEY')
   };
 }
 
-/** Gemini APIキーを保存。adminKey 必須。先生が管理画面から入力する。 */
+/** 旧管理画面との互換用。OpenAIキーも種類を判別して正しい保存先へ登録する。 */
 function setGeminiKey(adminKey, key) {
-  requireAdmin_(adminKey);
-  key = String(key || '').trim();
-  if (!key) throw new Error('キーが空です。');
-  var props = PropertiesService.getScriptProperties();
-  props.setProperty('GEMINI_API_KEY', key);
-  props.deleteProperty('TRIAL_MODE');   // 自分のキーを入れたら、お試しモードは終了
-  return { ok: true };
+  return setAiKey(adminKey, key);
 }
 
 /** お試しキー（配布元の中継サーバ経由）で使い始める。adminKey 必須。 */
 function enableTrialMode(adminKey) {
   requireAdmin_(adminKey);
   var props = PropertiesService.getScriptProperties();
-  if (props.getProperty('GEMINI_API_KEY')) {
+  if (hasApiKey_()) {
     return { ok: true, note: '自分のAPIキーが設定済みのため、そちらを使います。' };
   }
+  props.setProperty('AI_PROVIDER', 'gemini');
   props.setProperty('TRIAL_MODE', 'on');
   return { ok: true };
 }
@@ -191,6 +191,7 @@ function enableTrialMode(adminKey) {
  */
 function testGemini(adminKey) {
   requireAdmin_(adminKey);
+  if (getAiProvider_() === 'openai') return testAi(adminKey);
   var props = PropertiesService.getScriptProperties();
   var hasKey = !!props.getProperty('GEMINI_API_KEY');
   var trial = !hasKey && props.getProperty('TRIAL_MODE') === 'on';

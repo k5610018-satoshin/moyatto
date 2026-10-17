@@ -7,6 +7,9 @@
  *   2つ目の有効な見方でスッキリ。安易な受容はしないが、問い返しはやさしく短く。
  */
 
+// ===== AI 設定 =====
+// OpenAI: OPENAI_API_KEY + AI_PROVIDER=openai をスクリプトプロパティに保存。
+// GPT-6 Luna / medium は OpenAI.gs で固定。既存のGemini設定は移行まで利用できる。
 // ===== Gemini 設定 =====
 // APIキーはコードに書かない。先生用ダッシュボードの「設定」から、または
 //   GASエディタの「プロジェクトの設定 > スクリプト プロパティ」で GEMINI_API_KEY を登録する。
@@ -32,7 +35,8 @@ function getApiKey_() {
 
 /** APIキーが設定済みかだけ確認（例外を投げない）。 */
 function hasApiKey_() {
-  return !!PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
+  var name = getAiProvider_() === 'openai' ? 'OPENAI_API_KEY' : 'GEMINI_API_KEY';
+  return !!PropertiesService.getScriptProperties().getProperty(name);
 }
 
 // ===== お試しキー中継（トライアルモード） =====
@@ -45,7 +49,7 @@ var TRIAL_PROXY_URL = 'https://script.google.com/macros/s/AKfycbxmWwg7nOJCJzwf7N
 /** お試しモードが有効か（自分のキーが無く、TRIAL_MODE がonのとき）。 */
 function isTrialActive_() {
   var p = PropertiesService.getScriptProperties();
-  return !p.getProperty('GEMINI_API_KEY') && p.getProperty('TRIAL_MODE') === 'on';
+  return getAiProvider_() === 'gemini' && !p.getProperty('GEMINI_API_KEY') && p.getProperty('TRIAL_MODE') === 'on';
 }
 
 /**
@@ -55,7 +59,7 @@ function isTrialActive_() {
  */
 function geminiRequest_(body) {
   var url, payload;
-  if (hasApiKey_()) {
+  if (PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY')) {
     url = 'https://generativelanguage.googleapis.com/v1beta/models/' +
       encodeURIComponent(MODEL) + ':generateContent?key=' + encodeURIComponent(getApiKey_());
     payload = JSON.stringify(body);
