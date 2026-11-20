@@ -37,7 +37,7 @@ function completed(value) {
   ] };
 }
 
-test('Luna medium request uses Responses API, strict JSON and no stored response', () => {
+test('Sol 6.2 medium request uses Responses API, strict JSON and no stored response', () => {
   const { context, requests } = app({ OPENAI_API_KEY: 'sk-mock-value-for-unit-tests-only' }, [
     { body: completed({ ready: true }) }
   ]);
@@ -46,7 +46,7 @@ test('Luna medium request uses Responses API, strict JSON and no stored response
   const request = requests[0];
   const body = JSON.parse(request.payload);
   assert.equal(request.url, 'https://api.openai.com/v1/responses');
-  assert.equal(body.model, 'gpt-6-luna');
+  assert.equal(body.model, 'gpt-6.2-sol');
   assert.equal(body.reasoning.effort, 'medium');
   assert.equal(body.store, false);
   assert.equal(body.text.format.strict, true);
@@ -63,7 +63,7 @@ test('existing Gemini settings stay active until a new OpenAI key is registered'
   assert.equal(properties.GEMINI_API_KEY, 'AIzaMockGeminiKeyForTestsOnly');
   const settings = context.getSettings('test-admin');
   assert.equal(settings.aiReady, true);
-  assert.equal(settings.model, 'gpt-6-luna');
+  assert.equal(settings.model, 'gpt-6.2-sol');
   assert.equal(settings.reasoningEffort, 'medium');
   assert.equal(JSON.stringify(settings).includes('sk-mock'), false);
   assert.throws(() => context.setAiKey('wrong-admin', 'sk-mock-openai-key-for-tests-only'));
@@ -127,4 +127,50 @@ test('rate limits retry once and admin test errors do not expose API error bodie
   assert.equal(result.ok, false);
   assert.ok(result.error.includes('429'));
   assert.equal(result.error.includes('private API detail'), false);
+});
+
+test('an encouraging opening can be followed by a genuine reframe', () => {
+  const verdict = { cleared: false, progress: 1, acceptedReframes: ['練習する場所が分かった'], reason: '', reply: 'なるほど' };
+  const { context, requests } = app({ OPENAI_API_KEY: 'test-key' }, [{ body: completed(verdict) }]);
+  const answer = text => context.askMoyatto({ troubleId: 'test', messages: [{ role: 'user', text }] });
+  assert.equal(answer('ドンマイ！').cleared, false);
+  assert.equal(requests.length, 0);
+  assert.equal(answer('ドンマイ。今回の点で、練習する場所が分かったよ。').progress, 1);
+  assert.equal(requests.length, 1);
+});
+
+test('two strings cannot override an explicit non-clear verdict; punctuation alone is not a new idea', () => {
+  const { context } = app();
+  const mismatch = context.result_(false, 0, ['練習する場所が分かった', '自分のよさは点数だけで決まらない'], '', '');
+  assert.equal(mismatch.cleared, false);
+  assert.equal(mismatch.retryable, true);
+  const duplicate = context.result_(true, 2, ['練習する場所が分かった', '練習する 場所が分かった。'], '', '');
+  assert.equal(duplicate.cleared, false);
+  assert.equal(duplicate.progress, 1);
+});
+
+test('temporary failures allow retry while a model refusal offers adult support', () => {
+  const refused = { status: 'completed', output: [{ type: 'message', role: 'assistant', content: [{type: 'refusal'}] }] };
+  const { context } = app({ OPENAI_API_KEY: 'test-key' }, [{ status: 503 }, { status: 503 }, { body: refused }]);
+  const input = { troubleId: 'test', messages: [{role: 'user', text: '練習する場所が分かった。'}] };
+  assert.equal(context.askMoyatto(input).retryable, true);
+  const support = context.askMoyatto(input);
+  assert.equal(support.support, true);
+  assert.equal(support.cleared, false);
+  assert.equal(support.retryable, undefined);
+});
+
+test('a later ordinary answer does not include an earlier sensitive disclosure in its API input', () => {
+  const { context, requests } = app({ OPENAI_API_KEY: 'test-key' }, [
+    { body: completed({cleared: false, progress: 1, acceptedReframes: ['練習する場所が分かった'], reason: '', reply: 'なるほど'}) }
+  ]);
+  const messages = [{role: 'user', text: 'いじめられている'}];
+  assert.equal(context.askMoyatto({ troubleId: 'test', messages }).support, true);
+  assert.equal(requests.length, 0);
+  messages.push({role: 'model', text: '相談してね。'}, {role: 'user', text: '練習する場所が分かった。'});
+  assert.equal(context.askMoyatto({ troubleId: 'test', messages }).progress, 1);
+  const turns = JSON.parse(requests[0].payload).input;
+  assert.equal(turns.length, 1);
+  assert.ok(turns[0].content.includes('練習する場所が分かった'));
+  assert.ok(!turns[0].content.includes('いじめられている'));
 });

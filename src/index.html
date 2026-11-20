@@ -181,12 +181,12 @@
 
   /* input */
   .inputbar{display:flex;gap:8px;margin-top:12px;position:sticky;bottom:8px;flex:0 0 auto}
-  .inputbar input{
+  .inputbar textarea{
     flex:1;border:1.5px solid var(--line);border-radius:14px;padding:12px 14px;font-family:inherit;
     font-size:1rem;background:#fff;color:var(--ink);box-shadow:var(--shadow);min-width:0;
   }
-  .inputbar input:focus{outline:none;border-color:var(--teal)}
-  .inputbar input::placeholder{color:#A9B4C0}
+  .inputbar textarea:focus{outline:none;border-color:var(--teal)}
+  .inputbar textarea::placeholder{color:#A9B4C0}
   .btn{
     border:none;border-radius:14px;padding:0 18px;font-family:inherit;font-weight:800;font-size:.98rem;
     background:var(--teal);color:#fff;cursor:pointer;transition:background .12s,transform .1s;box-shadow:var(--shadow);
@@ -383,6 +383,71 @@
     #screen-pick .history-panel{flex-basis:288px;width:288px}
   }
 
+
+  .answer-field{flex:1;min-width:0;display:grid;gap:5px}
+  .answer-field label{font-size:1rem;font-weight:800;color:var(--ink)}
+  .inputbar{align-items:flex-end}
+  .inputbar textarea{display:block;width:100%;line-height:1.55;resize:vertical}
+  .inputbar textarea::placeholder{color:#576978}
+  #send{min-width:75px;min-height:52px;background:#14667a}
+  #send:disabled{background:#627480}
+  .hint summary{cursor:pointer;line-height:1.5}
+  .hint:not([open]) summary{margin-bottom:0}
+  .turn{overflow-wrap:anywhere;white-space:pre-wrap}
+  :where(button,textarea,input,summary):focus-visible{outline:3px solid #115b85;outline-offset:2px}
+
+  /* タブレットは会話と入力の幅を優先する。キーボード表示時もページを自然にスクロールできる。 */
+  @media (max-width:1179px), (any-pointer:coarse){
+    .app{padding:12px clamp(12px,3vw,28px) max(18px,env(safe-area-inset-bottom))}
+    .app.play-active{height:auto;min-height:100%;overflow:visible}
+    #screen-play .play-grid{display:grid;height:auto;align-items:start;align-content:start;
+      grid-template-columns:minmax(0,1fr);grid-template-areas:"scene" "hint" "talk";gap:12px}
+    .play-left{grid-area:scene;display:flex;flex-direction:row;gap:14px;align-items:center;min-width:0}
+    .play-left .stage{flex:0 0 auto;margin:0}
+    .app.play-active .character{width:80px;height:70px}
+    .play-left .bubble{margin:0;font-weight:600;font-family:inherit;font-size:1.05rem;line-height:1.65}
+    .play-left .bubble::before{display:none}
+    .play-left .mood-meter{width:82px}
+    .play-right{grid-area:hint;height:auto;min-width:0;overflow:visible;padding:0}
+    .play-mid{grid-area:talk;height:auto;min-width:0;padding:14px;background:#fff;border:1px solid #cbdae3;border-radius:18px}
+    .play-mid .log{flex:0 1 auto;margin:0;max-height:clamp(125px,32vh,352px);max-height:clamp(125px,32dvh,352px);overflow:auto}
+    .play-mid .inputbar{position:static;margin:12px 0 0}
+    .play-mid .log:empty + .inputbar{margin-top:0}
+    .play-mid.show-clear #clearzone{overflow:visible}
+    .turn,.turn.moya,.turn.hint-bubble,.hint-row.tip .val,.class-wall-text,.history-reframe{font-family:inherit;font-size:1.05rem}
+    .turn.kid{background:#19677b}
+    .hint{margin:0}
+    .hint-title{min-height:44px;padding:10px 0}
+    .hint-row .lbl{color:#665425;font-size:.86rem}
+    .hint-row.change .val{color:#983f2f}
+    .hint .tag{background:#90402f}
+    .mode-card .m-ex{color:#536371;white-space:normal}
+    .section-label,.back,.mode-card .m-hint{font-size:1rem}
+    #screen-pick .card{min-height:58px;font-size:1rem}
+    .btn,.back,.hint-more,.add-toggle,.vote-toggle,.next-mode,.wall-open{min-height:44px;min-width:44px}
+    .join-box input,.add-form input,.inputbar textarea{font-size:17px}
+    .play-mid .inputbar textarea{scroll-margin-block:20px}
+  }
+  @media (min-width:900px) and (max-width:1179px), (min-width:900px) and (any-pointer:coarse){
+    #screen-play .play-grid{grid-template-columns:minmax(230px, .8fr) minmax(0,1.5fr);
+      grid-template-areas:"scene talk" "hint talk";gap:14px 20px}
+    .play-left{flex-direction:column}
+    .play-mid{grid-row:span 2;align-self:start}
+  }
+  @media (min-width:760px) and (max-width:899px){
+    #screen-pick .pick-body{flex-direction:column}
+    #screen-pick .pick-main,#screen-pick .history-panel{width:100%;max-width:none}
+    #screen-pick .history-panel{position:static;flex-basis:auto;max-height:none}
+  }
+  @media (max-width:540px){
+    .play-mid{padding:10px}
+    #send{min-width:64px;padding:0 10px}
+    .play-left{gap:8px}
+    .app.play-active .character{width:58px;height:52px}
+    .play-left .mood-meter{width:48px}
+    .mode-chip{white-space:normal}
+  }
+
   @media (prefers-reduced-motion:reduce){
     *{animation:none !important;transition:none !important}
   }
@@ -506,10 +571,13 @@
 
       <!-- col2: 会話＋入力 -->
       <div class="play-mid">
-        <div class="log" id="log"></div>
+        <div class="log" id="log" role="log" aria-label="モヤットとの会話" aria-live="polite"></div>
 
         <div class="inputbar" id="inputbar">
-          <input id="msg" type="text" autocomplete="off" placeholder="ちょっと ちがう 見方を 教えてあげよう">
+          <div class="answer-field">
+            <label for="msg">きみの 見方</label>
+            <textarea id="msg" rows="2" maxlength="1000" autocomplete="off" placeholder="ちょっと ちがう 見方を 教えてあげよう"></textarea>
+          </div>
           <button class="btn" id="send">おくる</button>
         </div>
 
@@ -518,13 +586,13 @@
 
       <!-- col3: ヒント -->
       <div class="play-right">
-        <div class="hint" id="hintBox">
-          <div class="hint-title">💭 いっしょに 整理してみよう</div>
+        <details class="hint" id="hintBox" open>
+          <summary class="hint-title">💭 いっしょに 整理してみよう</summary>
           <div class="hint-row"><span class="lbl">事実（ほんとうに あったこと）</span><span class="val" id="h-fact"></span></div>
           <div class="hint-row change"><span class="lbl">モヤットの 今の とらえ方</span><span class="val" id="h-take"></span><span class="tag">← ここを 変えてあげよう</span></div>
           <div class="hint-row tip"><span class="lbl">考える ヒント</span><span class="val" id="h-tip"></span></div>
           <button class="hint-more" id="moreHintBtn" type="button">💡 ヒントを もう一つ</button>
-        </div>
+        </details>
         <div class="wall-panel hidden" id="wallPanel">
           <div class="wall-panel-title">🌈 他のみんなは こんな見方をしたよ</div>
           <div id="wallList"></div>
@@ -566,6 +634,7 @@ let convo = [];
 let acceptedReframes = [];
 let clearReason = '';
 let hintCount = 0;
+let playAttempt = 0;
 const MAX_HINTS = 3;
 
 const $ = id => document.getElementById(id);
@@ -573,7 +642,7 @@ function reduceMotion(){ try { return window.matchMedia && window.matchMedia('(p
 
 // ===== ポイント（たすけた モヤットの 数）=====
 // うまさの採点ではなく、助けた数（参加・努力のごほうび）。何回かかっても 1クリア = +1。
-let score = loadScore();
+let score = (SESSION && SESSION.code) ? 0 : loadScore();
 function loadScore(){ try { return parseInt(localStorage.getItem('moyatto_score') || '0', 10) || 0; } catch(e){ return 0; } }
 function saveScore(){ try { localStorage.setItem('moyatto_score', String(score)); } catch(e){} }
 function renderScore(){ $('scoreNum').textContent = score; }
@@ -894,6 +963,7 @@ function syncVoteResultsBox(){
 function requestMoreHint(){
   if(!current) return;
   if(hintCount >= MAX_HINTS){ updateHintButton(); return; }
+  const attempt = playAttempt;
   hintCount++;
   updateHintButton();
   var btn = $('moreHintBtn'); if(btn) btn.disabled = true;
@@ -901,12 +971,14 @@ function requestMoreHint(){
   t.innerHTML = 'モヤットが ヒントを 考えてる<span class="dots"><span>.</span><span>.</span><span>.</span></span>';
   google.script.run
     .withSuccessHandler(function(r){
+      if (attempt !== playAttempt) return;
       t.remove();
       var hint = (r && r.hint) ? r.hint : 'ヒント: 起きたことは そのままにして、別の理由や よい面を 探してみよう。';
       addTurn(hint, 'moya').classList.add('hint-bubble');
       updateHintButton();
     })
     .withFailureHandler(function(){
+      if (attempt !== playAttempt) return;
       t.remove();
       var fallbackHint = 'ヒント: 起きたことは そのままにして、別の理由や よい面を 探してみよう。';
       addTurn(fallbackHint, 'moya').classList.add('hint-bubble');
@@ -924,6 +996,7 @@ function updateHintButton(){
 
 // なやみ追加: 子どもが書いた困りごと → サーバでAI構造化＋安全判定 → 先生承認待ちに
 function submitProposal(){
+  if ($('addSend').disabled) return;
   var input = $('addInput'); var txt = (input.value || '').trim();
   if(!txt){ input.focus(); return; }
   $('addSend').disabled = true; $('addMsg').textContent = 'モヤットに 相談中…';
@@ -951,6 +1024,7 @@ function setExpr(name){
 function pickPositive(){ var p = ['happy','aha','confident','relieved','motivated']; return p[Math.floor(Math.random()*p.length)]; }
 
 function showScreen(which){
+  if (which !== 'play') playAttempt++;
   ['join','mode','pick','play','wall'].forEach(function(s){ var el = $('screen-'+s); if(el) el.classList.toggle('hidden', s !== which); });
   // play画面のときだけ .app をiframe高にロックしてページスクロールを消す（mode/pickは必要時だけスクロール可）
   var appEl = document.querySelector('.app'); if(appEl) appEl.classList.toggle('play-active', which === 'play');
@@ -1007,6 +1081,7 @@ function renderPicker(modeId){
 
 // ---- play ----
 function startTrouble(t){
+  playAttempt++;
   current = t; convo = []; acceptedReframes = []; clearReason = ''; hintCount = 0;
   if (SESSION && SESSION.code && pid) { google.script.run.heartbeat(SESSION.code, pid, t.label); }
   var ch = $('char'); ch.className = 'character mood-sad'; ch.classList.remove('celebrate');
@@ -1028,7 +1103,7 @@ function startTrouble(t){
   $('msg').value = '';
   $('msg').disabled = false; $('send').disabled = false;
   showScreen('play');
-  $('msg').focus();
+  focusAnswerOnDesktop();
 }
 
 function addTurn(text, who){
@@ -1040,11 +1115,20 @@ function addTurn(text, who){
   return d;
 }
 
+function usesTouch() {
+  return window.matchMedia('(any-pointer: coarse)').matches;
+}
+
+function focusAnswerOnDesktop() {
+  if (!usesTouch()) $('msg').focus();
+}
+
 function send(){
+  const attempt = playAttempt;
   const input = $('msg');
   const txt = input.value.trim();
-  if(!txt) return;
-  addTurn(txt, 'kid');
+  if(!txt || input.disabled) return;
+  const entry = addTurn(txt, 'kid');
   input.value = '';
   input.disabled = true; $('send').disabled = true;
   convo.push({role:'user', text:txt});
@@ -1054,11 +1138,25 @@ function send(){
   thinking.innerHTML = 'モヤットが 考えてる<span class="dots"><span>.</span><span>.</span><span>.</span></span>';
   setExpr('worried');
 
-  google.script.run
-    .withSuccessHandler(function(result){ onReply(result, thinking); })
-    .withFailureHandler(function(err){
-      onReply({ cleared:false, progress:acceptedReframes.length, acceptedReframes:acceptedReframes, reply:'ごめん、今の見方を うまく 確かめられなかったよ。クリアには しないで、もう一回 教えてくれる?' }, thinking);
-    })
+  function received(result) {
+    if (attempt !== playAttempt) return;
+    if (!result || result.retryable || result.support) {
+      // 評価できなかった発言・相談への返事を、次回のAI判定に含めない。
+      convo.pop();
+      thinking.remove();
+      if (!result || !result.support) {
+        entry.remove();
+        input.value = txt;
+      }
+      addTurn((result && result.reply) || '今は 判定できなかったよ。書いた文のまま、もう一度 おくってね。', 'moya');
+      input.disabled = false;
+      $('send').disabled = false;
+      focusAnswerOnDesktop();
+      return;
+    }
+    onReply(result, thinking);
+  }
+  google.script.run.withSuccessHandler(received).withFailureHandler(function(){ received(null); })
     .askMoyatto({ troubleId: current.id, messages: convo });
 }
 
@@ -1077,7 +1175,7 @@ function onReply(result, thinking){
   }else{
     setExpr('talk');
     const input = $('msg');
-    input.disabled = false; $('send').disabled = false; input.focus();
+    input.disabled = false; $('send').disabled = false; focusAnswerOnDesktop();
   }
 }
 
@@ -1091,6 +1189,9 @@ function updateMood(progress){
 
 function showCleared(result){
   const before = score;
+  const attempt = playAttempt;
+  const inClass = !!(SESSION && SESSION.code && pid);
+  const solvedTrouble = current;
   const ch = $('char');
   ch.className = 'character mood-happy';
   ch.classList.remove('celebrate'); void ch.offsetWidth; ch.classList.add('celebrate');
@@ -1102,7 +1203,7 @@ function showCleared(result){
   $('inputbar').style.display = 'none';
   var mhBtn = $('moreHintBtn'); if(mhBtn) mhBtn.style.display = 'none';
   var pmZone = document.querySelector('.play-mid'); if(pmZone) pmZone.classList.add('show-clear');
-  if(!(SESSION && SESSION.code && pid)) addPoint();
+  if(!inClass) addPoint();
   celebrateConfetti();
   sparkle($('avatarImg'));
   const ms = milestoneMsg(score);
@@ -1111,7 +1212,7 @@ function showCleared(result){
   var reason = (result && result.reason) ? result.reason : clearReason;
   $('clearzone').innerHTML =
     '<div class="cleared">' +
-      '<div class="clear-badge">やったね！ ＋1 ☀️</div>' +
+      '<div class="clear-badge" id="clearStatus" role="status">' + (inClass ? 'スッキリ！ 記録しています…' : 'やったね！ ＋1 ☀️') + '</div>' +
       '<p>2つの 見方が 見つかったから、モヤットの もやもやが 晴れたよ。</p>' +
       '<div class="accepted-list">' + refs.map(function(r){ return '<div class="accepted-item">「' + escHtml(r) + '」</div>'; }).join('') + '</div>' +
       (reason ? '<div class="clear-reason">モヤット: ' + escHtml(reason) + '</div>' : '') +
@@ -1127,15 +1228,30 @@ function showCleared(result){
   renderNextChoices();
   var clearWallBtn = $('clearWallBtn'); if(clearWallBtn) clearWallBtn.onclick = function(){ openClassWall('play'); };
   // 見方の共有: 2つの有効な見方を保存し、同じ悩みの仲間の見方ウォールを表示（セッション時のみ）
-  if (SESSION && SESSION.code && pid) {
+  if (inClass) {
+    function recordNotConfirmed() {
+      if (attempt !== playAttempt) return;
+      $('clearStatus').textContent = 'スッキリ！ 記録を 確かめられなかったよ。先生に 伝えてね。';
+    }
     google.script.run
       .withSuccessHandler(function(r){
-        if(r && typeof r.score === 'number'){ var old = score; score = r.score; renderScore(); countUp($('clearScore'), old, score); }
+        if (!r || !r.ok) { recordNotConfirmed(); return; }
+        if (typeof r.score === 'number' && r.score >= score) {
+          var old = score;
+          score = r.score;
+          renderScore();
+          if (attempt === playAttempt) countUp($('clearScore'), old, score);
+        }
         refreshMyHistory();
-        google.script.run.withSuccessHandler(renderWall).withFailureHandler(function(){ renderWall([]); }).getWall(SESSION.code, pid, 8, current.id);
+        if (attempt !== playAttempt) return;
+        $('clearStatus').textContent = r.duplicate ? 'スッキリ！ この なやみは 記録ずみだよ。' : '記録できたよ！ ＋1 ☀️';
+        google.script.run
+          .withSuccessHandler(function(items){ if (attempt === playAttempt) renderWall(items); })
+          .withFailureHandler(function(){ if (attempt === playAttempt) renderWall([]); })
+          .getWall(SESSION.code, pid, 8, solvedTrouble.id);
       })
-      .withFailureHandler(function(){ renderWall([]); })
-      .completeReframe(SESSION.code, pid, current.id, current.label, refs, reason);
+      .withFailureHandler(recordNotConfirmed)
+      .completeReframe(SESSION.code, pid, solvedTrouble.id, solvedTrouble.label, refs, reason);
   } else {
     addLocalHistory({ troubleId: current.id, troubleLabel: current.label, reframe: refs.join(' / '), reframe1: refs[0] || '', reframe2: refs[1] || '', reason: reason, createdAt: new Date().toISOString() });
   }
@@ -1275,13 +1391,14 @@ function pollSessionState(){
 }
 
 function doJoin(){
+  if ($('joinBtn').disabled) return;
   var name = ($('joinName').value || '').trim();
   if(!name){ $('joinName').focus(); return; }
   $('joinBtn').disabled = true; $('joinMsg').textContent = '';
   google.script.run
     .withSuccessHandler(function(res){
       pid = res.pid; myName = res.name || ''; try{ localStorage.setItem('moyatto_pid_' + SESSION.code, pid); }catch(e){}
-      google.script.run.withSuccessHandler(function(s){ if(typeof s === 'number'){ score = s; renderScore(); } }).getMyScore(SESSION.code, pid);
+      google.script.run.withSuccessHandler(function(s){ if(typeof s === 'number'){ score = Math.max(score, s); renderScore(); } }).getMyScore(SESSION.code, pid);
       refreshMyHistory();
       gotoStart();
     })
@@ -1289,8 +1406,23 @@ function doJoin(){
     .joinSession(SESSION.code, name);
 }
 
+// 日本語変換の確定と送信を区別する。タッチ端末の回答欄では改行もできる。
+function bindEnter(field, action, multiline) {
+  var composing = false;
+  var ended = -Infinity;
+  field.addEventListener('compositionstart', function(){ composing = true; });
+  field.addEventListener('compositionend', function(){ composing = false; ended = performance.now(); });
+  field.addEventListener('keydown', function(e){
+    if (e.key !== 'Enter' || e.isComposing || composing || e.keyCode === 229 || performance.now() - ended < 40) return;
+    if (multiline && !e.ctrlKey && !e.metaKey && (e.shiftKey || usesTouch())) return;
+    e.preventDefault();
+    action();
+  });
+}
+
+$('hintBox').open = !window.matchMedia('(max-width:899px)').matches;
 $('send').onclick = send;
-$('msg').addEventListener('keydown', e => { if(e.key === 'Enter') send(); });
+bindEnter($('msg'), send, true);
 $('back').onclick = () => showScreen('pick');
 $('toModes').onclick = () => showScreen('mode');
 var _owBtn = $('openWallBtn'); if(_owBtn) _owBtn.onclick = function(){ openClassWall('pick'); };
@@ -1302,7 +1434,7 @@ var _svBtn = $('saveVotesBtn'); if(_svBtn) _svBtn.onclick = saveWallVotes;
 var _mhBtn = $('moreHintBtn'); if(_mhBtn) _mhBtn.onclick = requestMoreHint;
 var _atBtn = $('addToggle'); if(_atBtn) _atBtn.onclick = function(){ var f = $('addForm'); if(f){ f.classList.toggle('hidden'); if(!f.classList.contains('hidden')){ var ai = $('addInput'); if(ai) ai.focus(); } } };
 var _asBtn = $('addSend'); if(_asBtn) _asBtn.onclick = submitProposal;
-var _aiInp = $('addInput'); if(_aiInp) _aiInp.addEventListener('keydown', function(e){ if(e.key === 'Enter') submitProposal(); });
+var _aiInp = $('addInput'); if(_aiInp) bindEnter(_aiInp, submitProposal, false);
 
 renderModes();
 renderScore();
@@ -1315,9 +1447,9 @@ if (typeof AVATARS !== 'undefined' && AVATARS && AVATARS.talk) {
 if (SESSION && SESSION.code) {
   var _cl = $('joinCodeLabel'); if(_cl) _cl.textContent = SESSION.code;
   var _jb = $('joinBtn'); if(_jb) _jb.onclick = doJoin;
-  var _jn = $('joinName'); if(_jn) _jn.addEventListener('keydown', function(e){ if(e.key === 'Enter') doJoin(); });
+  var _jn = $('joinName'); if(_jn) bindEnter(_jn, doJoin, false);
   if (pid) {
-    google.script.run.withSuccessHandler(function(s){ if(typeof s === 'number'){ score = s; renderScore(); } }).getMyScore(SESSION.code, pid);
+    google.script.run.withSuccessHandler(function(s){ if(typeof s === 'number'){ score = Math.max(score, s); renderScore(); } }).getMyScore(SESSION.code, pid);
     refreshMyHistory();
     gotoStart();
   } else {

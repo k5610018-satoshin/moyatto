@@ -1,5 +1,5 @@
 /** OpenAI Responses API。キーは Script Properties にだけ保存する。 */
-var OPENAI_MODEL = 'gpt-6-luna';
+var OPENAI_MODEL = 'gpt-6.2-sol';
 var OPENAI_REASONING_EFFORT = 'medium';
 
 function getAiProvider_() {
@@ -124,9 +124,13 @@ function callOpenAi_(systemText, contents) {
     },
     required: ['cleared', 'progress', 'acceptedReframes', 'reason', 'reply']
   };
-  var data = openAiJson_(systemText, contents, schema, null);
-  if (!data) return friendlyFallback_(contents.length <= 1);
-  return result_(data.cleared === true, data.progress, data.acceptedReframes, data.reason, data.reply);
+  try {
+    var data = openAiReadJson_(openAiRequest_(openAiBody_(systemText, contents, schema)));
+    return result_(data.cleared === true, data.progress, data.acceptedReframes, data.reason, data.reply);
+  } catch (error) {
+    if (error.message === 'OPENAI_REFUSAL') return adultSupport_();
+    return friendlyFallback_();
+  }
 }
 
 /** 管理者だけが実行できる、本番と同じJSON形式での疎通テスト。 */
@@ -146,7 +150,7 @@ function testAi(adminKey) {
         400: 'リクエスト設定を確認してください。',
         401: 'OpenAI APIキーを確認してください。',
         403: 'このプロジェクトのモデル利用権限を確認してください。',
-        404: 'このプロジェクトで GPT-6 Luna が利用できるか確認してください。',
+        404: 'このプロジェクトで ' + OPENAI_MODEL + ' が利用できるか確認してください。',
         429: 'OpenAI の利用上限・残高・混雑状況を確認してください。'
       };
       return { ok: false, error: 'HTTP ' + status + ': ' + (messages[status] || 'しばらくしてから再度テストしてください。') };

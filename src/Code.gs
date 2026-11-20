@@ -137,7 +137,15 @@ function askMoyatto(payload) {
   // Geminiに渡さず、やさしく「信頼できる大人へ」と促す（言い換えの対象にしない）。
   var lastUser = lastUserText_(contents);
   if (isHeavyTopic_(lastUser)) {
-    return result_(false, 0, [], '', 'それは、とっても 大事な こと。ひとりで がまん しないでね。おうちの人か 先生に、お話 してみて。');
+    return adultSupport_();
+  }
+
+  // 同じカードで後から別の回答を送った場合も、相談に切り替えた発言を外部へ再送しない。
+  for (var i = contents.length - 2; i >= 0; i--) {
+    if (contents[i].role === 'user' && isHeavyTopic_(contents[i].parts[0].text)) {
+      contents = dropLeadingModelTurns_(contents.slice(i + 1));
+      break;
+    }
   }
 
   // 軽量ヒューリスティック（初手のみ）: 明らかに浅い返事は Gemini に渡さず、ヒントを添えて聞き返す。
@@ -154,7 +162,7 @@ function askMoyatto(payload) {
 
   // 全体レート制限（超過時は静かにフォールバック＝授業を止めない）
   if (isRateLimited_()) {
-    return friendlyFallback_(contents.length <= 1);
+    return friendlyFallback_();
   }
 
   return callGemini_(buildSystemPrompt_(trouble), labelJudgementContents_(contents));
@@ -163,11 +171,19 @@ function askMoyatto(payload) {
 function result_(cleared, progress, acceptedReframes, reason, reply) {
   progress = Math.max(0, Math.min(2, Number(progress || 0)));
   var arr = Array.isArray(acceptedReframes) ? acceptedReframes : [];
+  var seen = Object.create(null);
   arr = arr.map(function (s) { return String(s || '').trim().slice(0, 120); })
-    .filter(function (s, i, a) { return s && a.indexOf(s) === i; })
+    .filter(function (s) {
+      var key = s.normalize('NFKC').replace(/\s+/g, '').replace(/[。.!?、]+$/g, '');
+      if (!key || seen[key]) return false;
+      seen[key] = true;
+      return true;
+    })
     .slice(0, 2);
+  if (arr.length === 2 && (cleared !== true || progress !== 2)) {
+    return friendlyFallback_();
+  }
   if (arr.length > progress) progress = arr.length;
-  if (progress >= 2 && arr.length >= 2) cleared = true;
   if (arr.length < 2) {
     cleared = false;
     progress = Math.min(progress, arr.length);
@@ -302,7 +318,6 @@ function thinkingConfig_() {
 /** Gemini generateContent を呼び構造化判定を返す。失敗時はクリアにしない。 */
 function callGemini_(systemText, contents) {
   if (getAiProvider_() === 'openai') return callOpenAi_(systemText, contents);
-  var firstTurn = contents.length <= 1;
   var body = {
     systemInstruction: { parts: [{ text: systemText }] },
     contents: contents,
@@ -334,11 +349,15 @@ function callGemini_(systemText, contents) {
   try {
     var res = geminiRequest_(body);
     if (res.getResponseCode() !== 200) {
-      return friendlyFallback_(firstTurn);
+      return friendlyFallback_();
     }
     var data = JSON.parse(res.getContentText());
     // Gemini 3.x は思考の part が混ざることがあるので、text を持つ part を探す
     var cand = data.candidates && data.candidates[0];
+    if ((data.promptFeedback && data.promptFeedback.blockReason) ||
+        (cand && ['SAFETY', 'PROHIBITED_CONTENT', 'BLOCKLIST', 'SPII'].indexOf(cand.finishReason) >= 0)) {
+      return adultSupport_();
+    }
     var parts = cand && cand.content && cand.content.parts;
     var text = '';
     if (parts) {
@@ -347,16 +366,16 @@ function callGemini_(systemText, contents) {
       }
     }
     if (!text) {
-      return friendlyFallback_(firstTurn);
+      return friendlyFallback_();
     }
-    return parseResult_(text, firstTurn);
+    return parseResult_(text);
   } catch (e) {
-    return friendlyFallback_(firstTurn);
+    return friendlyFallback_();
   }
 }
 
 /** モデル出力（JSON文字列）を構造化判定に変換。万一の崩れにも耐える。 */
-function parseResult_(text, firstTurn) {
+function parseResult_(text) {
   var clean = String(text).replace(/```json/gi, '').replace(/```/g, '').trim();
   try {
     var obj = JSON.parse(clean);
@@ -368,20 +387,21 @@ function parseResult_(text, firstTurn) {
       (typeof obj.reply === 'string' && obj.reply.trim()) ? obj.reply.trim() : 'ありがとう。もう一つ、ちがう見方も 探してみよう。'
     );
   } catch (e) {
-    return friendlyFallback_(firstTurn);
+    return friendlyFallback_();
   }
 }
 
-/**
- * 通信や解析に失敗したときのフォールバック。
- * 初手の失敗だけは「やさしくもう一回聞く」に倒し、§3/§6 の“やさしい一回の問い返し”を障害時に飛ばさない。
- * 方針転換後は、障害時に「できたこと」にしない。
- */
-function friendlyFallback_(firstTurn) {
-  if (firstTurn) {
-    return result_(false, 0, [], '', 'ごめん、うまく 聞こえなかったみたい。もう一回 おしえて?');
-  }
-  return result_(false, 0, [], '', 'ごめん、今の見方を うまく 確かめられなかったよ。クリアには しないで、もう一回だけ ちがう言い方で 教えてくれる?');
+/** 判定できなかったときは、回答と前回の進み具合を画面に残す。 */
+function friendlyFallback_() {
+  var result = result_(false, 0, [], '', '今は 判定できなかったよ。書いた文のまま、もう一度 おくってね。');
+  result.retryable = true;
+  return result;
+}
+
+function adultSupport_() {
+  var result = result_(false, 0, [], '', 'それは、とっても 大事な こと。ひとりで がまん しないでね。おうちの人か 先生に、お話 してみて。');
+  result.support = true;
+  return result;
 }
 
 /**
@@ -392,10 +412,10 @@ function friendlyFallback_(firstTurn) {
 function obviouslyShallow_(text, trouble) {
   var t = String(text || '').trim();
   if (!t) return '';
-  if (t.length < 3) return 'もうちょっと くわしく、"ちがう 見方" を おしえて? ヒント: 事実は そのままで、どう 考えると 楽に なるかな?';
+  var standalone = t.normalize('NFKC').replace(/[\s。、，,！!？?「」『』…~〜]+/g, '');
   var skip = ['気にしないで', 'きにしないで', '気にするな', 'きにするな', 'わすれて', '忘れて', 'どんまい', 'ドンマイ'];
   for (var i = 0; i < skip.length; i++) {
-    if (t.indexOf(skip[i]) !== -1) {
+    if (standalone === skip[i]) {
       return 'ありがとう。でも まだ もやもやするんだ。ヒント: 事実は 変えられないけど、その "見方" を べつの ふうに できないかな?';
     }
   }
