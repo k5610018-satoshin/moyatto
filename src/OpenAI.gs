@@ -106,11 +106,11 @@ function openAiReadJson_(response) {
   return JSON.parse(text);
 }
 
-function openAiJson_(systemText, contents, schema, fallback) {
+function openAiJson_(systemText, contents, schema, fallback, blocked) {
   try {
     return openAiReadJson_(openAiRequest_(openAiBody_(systemText, contents, schema)));
   } catch (e) {
-    return fallback;
+    return e.message === 'OPENAI_REFUSAL' && blocked ? blocked : fallback;
   }
 }
 

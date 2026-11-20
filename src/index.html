@@ -590,7 +590,7 @@
           <summary class="hint-title">💭 いっしょに 整理してみよう</summary>
           <div class="hint-row"><span class="lbl">事実（ほんとうに あったこと）</span><span class="val" id="h-fact"></span></div>
           <div class="hint-row change"><span class="lbl">モヤットの 今の とらえ方</span><span class="val" id="h-take"></span><span class="tag">← ここを 変えてあげよう</span></div>
-          <div class="hint-row tip"><span class="lbl">考える ヒント</span><span class="val" id="h-tip"></span></div>
+          <div class="hint-row tip"><span class="lbl">考える ヒント</span><span class="val" id="h-tip" aria-live="polite"></span></div>
           <button class="hint-more" id="moreHintBtn" type="button">💡 ヒントを もう一つ</button>
         </details>
         <div class="wall-panel hidden" id="wallPanel">
@@ -633,7 +633,9 @@ let lastVoteResults = { revealed:false, items:[] };
 let convo = [];
 let acceptedReframes = [];
 let clearReason = '';
-let hintCount = 0;
+let shownHints = [];
+let activeHint = null;
+let hintSupport = false;
 let playAttempt = 0;
 const MAX_HINTS = 3;
 
@@ -959,39 +961,48 @@ function syncVoteResultsBox(){
   }).join('');
 }
 
-// もっとヒント: 行きづまったとき別角度のヒントを一つ（答えは言わない）
+// ヒントは今のカードの送信済みの回答だけを使う。受け取れた分だけ回数に数える。
+function cancelHint(){
+  if (activeHint) activeHint.remove();
+  activeHint = null;
+}
+
 function requestMoreHint(){
-  if(!current) return;
-  if(hintCount >= MAX_HINTS){ updateHintButton(); return; }
+  if (!current || activeHint || hintSupport || $('msg').disabled || shownHints.length >= MAX_HINTS) return;
   const attempt = playAttempt;
-  hintCount++;
+  const turn = addTurn('モヤットが ヒントを 考えてる…', 'moya');
+  turn.classList.add('thinking');
+  activeHint = turn;
   updateHintButton();
-  var btn = $('moreHintBtn'); if(btn) btn.disabled = true;
-  var t = addTurn('', 'moya'); t.classList.add('thinking');
-  t.innerHTML = 'モヤットが ヒントを 考えてる<span class="dots"><span>.</span><span>.</span><span>.</span></span>';
-  google.script.run
-    .withSuccessHandler(function(r){
-      if (attempt !== playAttempt) return;
-      t.remove();
-      var hint = (r && r.hint) ? r.hint : 'ヒント: 起きたことは そのままにして、別の理由や よい面を 探してみよう。';
-      addTurn(hint, 'moya').classList.add('hint-bubble');
-      updateHintButton();
-    })
-    .withFailureHandler(function(){
-      if (attempt !== playAttempt) return;
-      t.remove();
-      var fallbackHint = 'ヒント: 起きたことは そのままにして、別の理由や よい面を 探してみよう。';
-      addTurn(fallbackHint, 'moya').classList.add('hint-bubble');
-      updateHintButton();
-    })
-    .moreHint({ troubleId: current.id, messages: convo, hintIndex: hintCount });
+
+  function finish(result) {
+    if (attempt !== playAttempt || activeHint !== turn) return;
+    cancelHint();
+    if (result && result.support) {
+      hintSupport = true;
+      $('h-tip').textContent = result.message;
+      addTurn(result.message, 'moya');
+    } else if (result && result.hint && !shownHints.some(h => h.hint === result.hint)) {
+      shownHints.push({ angle: result.angle || '', hint: result.hint });
+      $('h-tip').textContent = result.hint;
+      addTurn(result.hint, 'moya').classList.add('hint-bubble');
+    } else {
+      addTurn((result && result.message) || 'ヒントを 開けなかったよ。もう一度 おしてね。', 'moya');
+    }
+    updateHintButton();
+  }
+  google.script.run.withSuccessHandler(finish).withFailureHandler(function(){ finish(null); })
+    .moreHint({ troubleId: current.id, messages: convo.slice(-16), acceptedReframes: acceptedReframes.slice(),
+      shownHints: shownHints.slice(), hintIndex: shownHints.length + 1 });
 }
 
 function updateHintButton(){
-  var btn = $('moreHintBtn'); if(!btn) return;
-  var left = Math.max(0, MAX_HINTS - hintCount);
-  btn.textContent = left ? ('💡 ヒントを もう一つ（あと' + left + '回）') : '💡 ヒントは ここまで';
-  btn.disabled = left <= 0;
+  const btn = $('moreHintBtn');
+  if (!btn) return;
+  const left = Math.max(0, MAX_HINTS - shownHints.length);
+  btn.textContent = hintSupport ? '先生や おうちの人に 話してみよう' :
+    (left ? '💡 ヒントを もう一つ（あと' + left + '回）' : '💡 ヒントは ここまで');
+  btn.disabled = hintSupport || !!activeHint || $('msg').disabled || left <= 0;
 }
 
 // なやみ追加: 子どもが書いた困りごと → サーバでAI構造化＋安全判定 → 先生承認待ちに
@@ -1082,7 +1093,8 @@ function renderPicker(modeId){
 // ---- play ----
 function startTrouble(t){
   playAttempt++;
-  current = t; convo = []; acceptedReframes = []; clearReason = ''; hintCount = 0;
+  cancelHint();
+  current = t; convo = []; acceptedReframes = []; clearReason = ''; shownHints = []; hintSupport = false;
   if (SESSION && SESSION.code && pid) { google.script.run.heartbeat(SESSION.code, pid, t.label); }
   var ch = $('char'); ch.className = 'character mood-sad'; ch.classList.remove('celebrate');
   setExpr('trouble');
@@ -1099,9 +1111,10 @@ function startTrouble(t){
   $('clearzone').innerHTML = '';
   $('inputbar').style.display = 'flex';
   var pmZone2 = document.querySelector('.play-mid'); if(pmZone2) pmZone2.classList.remove('show-clear');
-  var mh = $('moreHintBtn'); if(mh){ mh.style.display = ''; updateHintButton(); }
+  var mh = $('moreHintBtn'); if(mh) mh.style.display = '';
   $('msg').value = '';
   $('msg').disabled = false; $('send').disabled = false;
+  updateHintButton();
   showScreen('play');
   focusAnswerOnDesktop();
 }
@@ -1128,9 +1141,11 @@ function send(){
   const input = $('msg');
   const txt = input.value.trim();
   if(!txt || input.disabled) return;
+  cancelHint();
   const entry = addTurn(txt, 'kid');
   input.value = '';
   input.disabled = true; $('send').disabled = true;
+  updateHintButton();
   convo.push({role:'user', text:txt});
 
   const thinking = addTurn('', 'moya');
@@ -1144,16 +1159,22 @@ function send(){
       // 評価できなかった発言・相談への返事を、次回のAI判定に含めない。
       convo.pop();
       thinking.remove();
-      if (!result || !result.support) {
+      if (result && result.support) {
+        hintSupport = true;
+        $('h-tip').textContent = result.reply;
+      } else {
         entry.remove();
         input.value = txt;
       }
       addTurn((result && result.reply) || '今は 判定できなかったよ。書いた文のまま、もう一度 おくってね。', 'moya');
       input.disabled = false;
       $('send').disabled = false;
+      updateHintButton();
       focusAnswerOnDesktop();
       return;
     }
+    if (hintSupport) $('h-tip').textContent = shownHints.length ? shownHints[shownHints.length - 1].hint : current.tip;
+    hintSupport = false;
     onReply(result, thinking);
   }
   google.script.run.withSuccessHandler(received).withFailureHandler(function(){ received(null); })
@@ -1175,7 +1196,7 @@ function onReply(result, thinking){
   }else{
     setExpr('talk');
     const input = $('msg');
-    input.disabled = false; $('send').disabled = false; focusAnswerOnDesktop();
+    input.disabled = false; $('send').disabled = false; updateHintButton(); focusAnswerOnDesktop();
   }
 }
 
