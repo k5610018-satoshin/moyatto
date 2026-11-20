@@ -137,7 +137,15 @@ function askMoyatto(payload) {
   // Geminiに渡さず、やさしく「信頼できる大人へ」と促す（言い換えの対象にしない）。
   var lastUser = lastUserText_(contents);
   if (isHeavyTopic_(lastUser)) {
-    return result_(false, 0, [], '', 'それは、とっても 大事な こと。ひとりで がまん しないでね。おうちの人か 先生に、お話 してみて。');
+    return adultSupport_();
+  }
+
+  // 同じカードで後から別の回答を送った場合も、相談に切り替えた発言を外部へ再送しない。
+  for (var i = contents.length - 2; i >= 0; i--) {
+    if (contents[i].role === 'user' && isHeavyTopic_(contents[i].parts[0].text)) {
+      contents = dropLeadingModelTurns_(contents.slice(i + 1));
+      break;
+    }
   }
 
   // 軽量ヒューリスティック（初手のみ）: 明らかに浅い返事は Gemini に渡さず、ヒントを添えて聞き返す。
@@ -154,7 +162,7 @@ function askMoyatto(payload) {
 
   // 全体レート制限（超過時は静かにフォールバック＝授業を止めない）
   if (isRateLimited_()) {
-    return friendlyFallback_(contents.length <= 1);
+    return friendlyFallback_();
   }
 
   return callGemini_(buildSystemPrompt_(trouble), labelJudgementContents_(contents));
@@ -163,11 +171,19 @@ function askMoyatto(payload) {
 function result_(cleared, progress, acceptedReframes, reason, reply) {
   progress = Math.max(0, Math.min(2, Number(progress || 0)));
   var arr = Array.isArray(acceptedReframes) ? acceptedReframes : [];
+  var seen = Object.create(null);
   arr = arr.map(function (s) { return String(s || '').trim().slice(0, 120); })
-    .filter(function (s, i, a) { return s && a.indexOf(s) === i; })
+    .filter(function (s) {
+      var key = s.normalize('NFKC').replace(/\s+/g, '').replace(/[。.!?、]+$/g, '');
+      if (!key || seen[key]) return false;
+      seen[key] = true;
+      return true;
+    })
     .slice(0, 2);
+  if (arr.length === 2 && (cleared !== true || progress !== 2)) {
+    return friendlyFallback_();
+  }
   if (arr.length > progress) progress = arr.length;
-  if (progress >= 2 && arr.length >= 2) cleared = true;
   if (arr.length < 2) {
     cleared = false;
     progress = Math.min(progress, arr.length);
@@ -260,12 +276,13 @@ function labelJudgementContents_(contents) {
 /** 重い話題の軽量ガード（完全ではないが、明白なものを拾う安全ネット）。 */
 function isHeavyTopic_(text) {
   if (!text) return false;
-  var t = String(text);
+  var t = String(text).normalize('NFKC').replace(/\s/g, '');
+  if (/(?:毎日|まいにち|何度も|なんども|いつも|何回も).{0,22}(?:無視され|むしされ|からかわれ|仲間はずれ|仲間外れ|なかまはずれ|笑われ|ばかにされ|バカにされ)/.test(t)) return true;
   var deny = [
     '死にたい', 'しにたい', '消えたい', 'きえたい', '殺す', '殺し', 'ころして', 'ころされ',
     'リストカット', 'リスカ', '自殺', 'じさつ',
     'いじめられ', 'いじめてくる', '殴られ', '殴る', '蹴られ', '蹴って', 'たたかれて', '叩かれ',
-    'さわられ', '触られ', '虐待', 'ぎゃくたい'
+    'さわられ', '触られ', '虐待', 'ぎゃくたい', 'いじめら', 'いじめにあ', 'やめてと言ってもやめてくれない'
   ];
   for (var i = 0; i < deny.length; i++) {
     if (t.indexOf(deny[i]) !== -1) return true;
@@ -302,7 +319,6 @@ function thinkingConfig_() {
 /** Gemini generateContent を呼び構造化判定を返す。失敗時はクリアにしない。 */
 function callGemini_(systemText, contents) {
   if (getAiProvider_() === 'openai') return callOpenAi_(systemText, contents);
-  var firstTurn = contents.length <= 1;
   var body = {
     systemInstruction: { parts: [{ text: systemText }] },
     contents: contents,
@@ -334,11 +350,15 @@ function callGemini_(systemText, contents) {
   try {
     var res = geminiRequest_(body);
     if (res.getResponseCode() !== 200) {
-      return friendlyFallback_(firstTurn);
+      return friendlyFallback_();
     }
     var data = JSON.parse(res.getContentText());
     // Gemini 3.x は思考の part が混ざることがあるので、text を持つ part を探す
     var cand = data.candidates && data.candidates[0];
+    if ((data.promptFeedback && data.promptFeedback.blockReason) ||
+        (cand && ['SAFETY', 'PROHIBITED_CONTENT', 'BLOCKLIST', 'SPII'].indexOf(cand.finishReason) >= 0)) {
+      return adultSupport_();
+    }
     var parts = cand && cand.content && cand.content.parts;
     var text = '';
     if (parts) {
@@ -347,16 +367,16 @@ function callGemini_(systemText, contents) {
       }
     }
     if (!text) {
-      return friendlyFallback_(firstTurn);
+      return friendlyFallback_();
     }
-    return parseResult_(text, firstTurn);
+    return parseResult_(text);
   } catch (e) {
-    return friendlyFallback_(firstTurn);
+    return friendlyFallback_();
   }
 }
 
 /** モデル出力（JSON文字列）を構造化判定に変換。万一の崩れにも耐える。 */
-function parseResult_(text, firstTurn) {
+function parseResult_(text) {
   var clean = String(text).replace(/```json/gi, '').replace(/```/g, '').trim();
   try {
     var obj = JSON.parse(clean);
@@ -368,20 +388,21 @@ function parseResult_(text, firstTurn) {
       (typeof obj.reply === 'string' && obj.reply.trim()) ? obj.reply.trim() : 'ありがとう。もう一つ、ちがう見方も 探してみよう。'
     );
   } catch (e) {
-    return friendlyFallback_(firstTurn);
+    return friendlyFallback_();
   }
 }
 
-/**
- * 通信や解析に失敗したときのフォールバック。
- * 初手の失敗だけは「やさしくもう一回聞く」に倒し、§3/§6 の“やさしい一回の問い返し”を障害時に飛ばさない。
- * 方針転換後は、障害時に「できたこと」にしない。
- */
-function friendlyFallback_(firstTurn) {
-  if (firstTurn) {
-    return result_(false, 0, [], '', 'ごめん、うまく 聞こえなかったみたい。もう一回 おしえて?');
-  }
-  return result_(false, 0, [], '', 'ごめん、今の見方を うまく 確かめられなかったよ。クリアには しないで、もう一回だけ ちがう言い方で 教えてくれる?');
+/** 判定できなかったときは、回答と前回の進み具合を画面に残す。 */
+function friendlyFallback_() {
+  var result = result_(false, 0, [], '', '今は 判定できなかったよ。書いた文のまま、もう一度 おくってね。');
+  result.retryable = true;
+  return result;
+}
+
+function adultSupport_() {
+  var result = result_(false, 0, [], '', 'それは、とっても 大事な こと。ひとりで がまん しないでね。おうちの人か 先生に、お話 してみて。');
+  result.support = true;
+  return result;
 }
 
 /**
@@ -392,10 +413,10 @@ function friendlyFallback_(firstTurn) {
 function obviouslyShallow_(text, trouble) {
   var t = String(text || '').trim();
   if (!t) return '';
-  if (t.length < 3) return 'もうちょっと くわしく、"ちがう 見方" を おしえて? ヒント: 事実は そのままで、どう 考えると 楽に なるかな?';
+  var standalone = t.normalize('NFKC').replace(/[\s。、，,！!？?「」『』…~〜]+/g, '');
   var skip = ['気にしないで', 'きにしないで', '気にするな', 'きにするな', 'わすれて', '忘れて', 'どんまい', 'ドンマイ'];
   for (var i = 0; i < skip.length; i++) {
-    if (t.indexOf(skip[i]) !== -1) {
+    if (standalone === skip[i]) {
       return 'ありがとう。でも まだ もやもやするんだ。ヒント: 事実は 変えられないけど、その "見方" を べつの ふうに できないかな?';
     }
   }
@@ -413,8 +434,8 @@ function obviouslyShallow_(text, trouble) {
  * 汎用 Gemini JSON 呼び出し（responseSchema で構造化）。失敗時は fallback をそのまま返す。
  * askMoyatto の callGemini_ とは別系統（{cleared,reply} 以外: もっとヒント / 悩み構造化）。
  */
-function geminiJson_(systemText, contents, schema, fallback) {
-  if (getAiProvider_() === 'openai') return openAiJson_(systemText, contents, schema, fallback);
+function geminiJson_(systemText, contents, schema, fallback, blocked) {
+  if (getAiProvider_() === 'openai') return openAiJson_(systemText, contents, schema, fallback, blocked);
   try {
     var body = {
       systemInstruction: { parts: [{ text: systemText }] },
@@ -436,6 +457,8 @@ function geminiJson_(systemText, contents, schema, fallback) {
     if (res.getResponseCode() !== 200) return fallback;
     var data = JSON.parse(res.getContentText());
     var cand = data.candidates && data.candidates[0];
+    if ((data.promptFeedback && data.promptFeedback.blockReason) ||
+        (cand && /^(SAFETY|PROHIBITED_CONTENT|BLOCKLIST)$/.test(cand.finishReason))) return blocked || fallback;
     var parts = cand && cand.content && cand.content.parts;
     var text = '';
     if (parts) {
@@ -450,29 +473,147 @@ function geminiJson_(systemText, contents, schema, fallback) {
 }
 
 /**
- * もっとヒント: 行きづまった子に、別角度の "考えるヒント" を一つ返す（答えは言わない）。
- * payload = { troubleId, hintIndex }  →  返り値 = { hint }
+ * このカードで送信した発言だけを読む。相談に切り替えた発言より前は再利用しない。
+ * 児童の下書き・名前・クラス情報は受け取らない。
  */
-function moreHint(payload) {
-  payload = payload || {};
-  var trouble = findTrouble_(payload.troubleId);
-  var fb = { hint: 'ヒント: 起きたことは そのままにして、「別の理由はあるかな?」「よい面はあるかな?」と考えてみよう。' };
-  if (!trouble) return fb;
-  return { hint: guidedHint_(trouble, payload.hintIndex || payload.hintCount || 1) };
+function hintContext_(request) {
+  var messages = Array.isArray(request.messages) ? request.messages.slice(-MAX_MESSAGES) : [];
+  var answers = [], replies = [], support = false, reset = false;
+  messages.forEach(function(m) {
+    if (!m || typeof m.text !== 'string') return;
+    var text = m.text.trim().slice(0, MAX_TEXT_LEN);
+    if (!text) return;
+    if (m.role === 'user') {
+      support = isHeavyTopic_(text);
+      if (support) { answers = []; replies = []; reset = true; }
+      else answers.push(text);
+    } else if (!support && (m.role === 'model' || m.role === 'assistant') && !isHeavyTopic_(text)) {
+      replies.push(text);
+    }
+  });
+  var shown = Array.isArray(request.shownHints) ? request.shownHints.slice(-3) : [];
+  var accepted = Array.isArray(request.acceptedReframes) ? request.acceptedReframes.slice(0, 2) : [];
+  return {
+    answers: answers.slice(-6),
+    replies: replies.slice(-2),
+    accepted: reset ? [] : accepted.filter(function(s) { return typeof s === 'string' && !isHeavyTopic_(s); })
+      .map(function(s) { return s.slice(0, 120); }),
+    shown: reset ? [] : shown.filter(function(h) { return h && typeof h.hint === 'string' && !isHeavyTopic_(h.hint); })
+      .map(function(h) { return { angle: String(h.angle || '').slice(0, 24), hint: h.hint.slice(0, 160) }; }),
+    index: Math.max(1, Math.min(3, Number(request.hintIndex || request.hintCount) || 1)),
+    support: support
+  };
 }
 
-function guidedHint_(trouble, hintIndex) {
-  var n = Math.max(1, Math.min(3, parseInt(hintIndex || 1, 10) || 1));
-  if (trouble && trouble.type === 'seikaku') {
-    if (n === 1) return 'ヒント: その特徴が 役に立つ場面は、どんな時かな?';
-    if (n === 2) return 'ヒント: 同じ特徴を 友だちが持っていたら、どんなよさに 見えるかな?';
-    return 'ヒント: 困る場面と 助かる場面を 分けて考えると、何が見えてくるかな?';
+function hintWords_(text) {
+  return String(text || '').normalize('NFKC').replace(/^ヒント\s*[:：]?\s*/, '')
+    .replace(/[\s、。!?！？「」『』・…〜~]/g, '').toLowerCase();
+}
+
+/** 表記や語尾だけを変えた問いはもう一度表示しない。 */
+function similarHint_(a, b) {
+  var x = hintWords_(a), y = hintWords_(b);
+  if (!x || !y) return false;
+  if (x === y || (Math.min(x.length, y.length) >= 5 && (x.indexOf(y) >= 0 || y.indexOf(x) >= 0))) return true;
+  if (Math.min(x.length, y.length) < 8) return false;
+  function pairs(s) {
+    var grams = new Set();
+    for (var i = 1; i < s.length; i++) grams.add(s.slice(i - 1, i + 1));
+    return grams;
   }
-  if (n === 1) return 'ヒント: もし友だちに 同じことが起きたら、全部だめだと 思うかな?';
-  if (n === 2) return 'ヒント: この出来事から、次に工夫できる 小さなことは 何かな?';
-  return 'ヒント: その一つの出来事だけで、ぜんぶを 決めつけていないかな?';
+  var left = pairs(x), right = pairs(y), both = 0;
+  left.forEach(function(g) { if (right.has(g)) both++; });
+  return 2 * both / (left.size + right.size) >= 0.74;
 }
 
+/** 例文を渡す前に問いの角度を選ぶ。教師の正解例はヒント生成に使わない。 */
+function chooseHint_(t, c) {
+  var isTrait = t.type === 'seikaku';
+  var bank = {
+    notice: 'お話の中で、たしかに起きたと言えるのは、どの部分かな？',
+    meaning: '起きたことから、モヤットはどんなことまで思ったのかな？',
+    anchor: 'その言葉をかけたくなったのは、お話のどこを読んだからかな？',
+    scope: 'この一場面から言えることは、どこまでかな？',
+    friend: '同じことを友だちが話したら、その子のことをどんなふうに見るかな？',
+    situation: isTrait ? '場所や相手が変わると、同じふるまいはどう見えるかな？' : 'その場にいた別の人には、どんなふうに見えたかもしれない？',
+    value: 'モヤットが大事にしたかったことに目を向けると、何が見えるかな？',
+    learning: 'あとでこの場面をふり返ったら、どんな手がかりが見つかりそう？',
+    agency: 'モヤットが自分で選べることに目を向けると、どう見えるかな？'
+  };
+  if (t.id === 'test' && /テスト|点数|答案/.test(t.fact)) {
+    bank.notice = '答案を見て、たしかに分かることは何かな？';
+    bank.anchor = '点数以外に、答案のどこをいっしょに見てあげたい？';
+    bank.scope = '今回の点だけで、モヤットについてどこまで分かるかな？';
+    bank.learning = 'あとで答案を見返すと、どんなことに気づけそう？';
+    bank.friend = '友だちが同じ点を取ったら、その子のことをどう思うかな？';
+  }
+  var last = c.answers[c.answers.length - 1] || '';
+  var words = hintWords_(last);
+  var used = c.accepted.join(' ') + ' ' + last;
+  var order;
+  if (!last) {
+    order = isTrait ? ['situation', 'value', 'notice'] : ['meaning', 'notice', 'friend'];
+  } else if (/^(わからない|分からない|思いつかない|むずかしい|難しい|うーん|わかんない|分かんない)$/.test(words)) {
+    order = ['notice', 'friend', 'meaning'];
+  } else if (last && /^(どんまい|ドンマイ|大丈夫|だいじょうぶ|がんばれ|頑張れ|気にしないで|きにしないで)$/.test(words)) {
+    order = ['anchor', 'friend', 'meaning'];
+  } else if (last && words === hintWords_(t.fact)) {
+    order = ['meaning', 'friend', 'scope'];
+  } else if (/練習|れんしゅう|次に|つぎに|つまず|まちがえた所|直す|なおす|準備|じゅんび|見直/.test(used)) {
+    order = ['scope', 'value', 'friend'];
+  } else if (/決まら|きまら|だけ|全部|ぜんぶ|一回|1回|いっかい/.test(used)) {
+    order = ['learning', 'situation', 'value'];
+  } else if (/かもしれ|かも|予定|都合|聞こえ/.test(used)) {
+    order = ['value', 'scope', 'agency'];
+  } else if (c.accepted.length) {
+    order = ['situation', 'value', 'scope'];
+  } else if (isTrait) {
+    order = ['situation', 'value', 'scope'];
+  } else {
+    order = ['notice', 'scope', 'friend'];
+  }
+  var keys = order.concat(Object.keys(bank).filter(function(k) { return order.indexOf(k) < 0; }));
+  var allIdeas = c.accepted.concat(c.answers).join(' ');
+  var covered = {
+    learning: /練習|れんしゅう|つまず|見直|直すところ|なおすところ/.test(allIdeas),
+    scope: /決まら|きまら|だけで|一回だけ|いっかいだけ/.test(allIdeas),
+    situation: /予定|都合|急いで|いそいで|聞こえな|きこえな/.test(allIdeas)
+  };
+  var usedText = [t.tip].concat(c.replies, c.shown.map(function(h) { return h.hint; }));
+  keys = keys.filter(function(k) {
+    return !covered[k] && !c.shown.some(function(h) { return h.angle === k; }) &&
+      !usedText.some(function(s) { return similarHint_(s, bank[k]); });
+  });
+  // 従来のクライアントが回数だけを送る場合も、次の問いへ進める。
+  var offset = c.shown.length ? 0 : Math.floor(c.index) - 1;
+  var angle = keys[Math.min(offset, keys.length - 1)];
+  return angle ? { angle: angle, hint: bank[angle] } : null;
+}
+
+function moreHint(request) {
+  request = request || {};
+  var t = findTrouble_(request.troubleId);
+  if (!t) return { retryable: true, message: 'お題を開き直してみてね。' };
+  var c = hintContext_(request);
+  if (c.support) return { support: true, message: adultSupport_().reply };
+  var choice = chooseHint_(t, c);
+  if (!choice) return { retryable: true, message: 'ここまでのヒントを見返してみてね。' };
+  if (!c.answers.length || (!hasApiKey_() && !isTrialActive_()) || isRateLimited_()) return choice;
+  var schema = { type: 'OBJECT', properties: {
+    hint: { type: 'STRING' }, needsAdult: { type: 'BOOLEAN' }
+  }, required: ['hint', 'needsAdult'] };
+  var context = { answers: c.answers, accepted: c.accepted, recentReplies: c.replies,
+    earlierHints: [t.tip].concat(c.shown.map(function(h) { return h.hint; })), nextQuestion: choice.hint };
+  var reply = geminiJson_(buildHintPrompt_(t), [{ role: 'user', parts: [{ text: JSON.stringify(context) }] }], schema, null, { hint: '', needsAdult: true });
+  if (reply && reply.needsAdult === true) return { support: true, message: adultSupport_().reply };
+  if (!reply || reply.needsAdult !== false || typeof reply.hint !== 'string') return choice;
+  var hint = reply.hint.trim().replace(/^ヒント\s*[:：]\s*/, '');
+  var duplicate = context.earlierHints.concat(c.replies).some(function(s) {
+    return similarHint_(s, hint);
+  });
+  if (hint.length < 5 || hint.length > 100 || !/^[^?？\n]+[?？]$/.test(hint) || duplicate || isHeavyTopic_(hint)) return choice;
+  return { angle: choice.angle, hint: hint };
+}
 /**
  * 参加者の悩み追加: 子どもが書いた困りごとを Gemini で悩みカードに構造化し、
  * 安全判定の上で「先生承認待ち（pending）」として保存する（Session.gs addProposal）。

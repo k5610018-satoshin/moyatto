@@ -29,12 +29,12 @@ https://script.google.com/macros/s/デプロイID/exec?admin=setup
 
 1. 先生用URLを開きます。
 2. 「設定・セッション」を開きます。
-3. OpenAI または Gemini のAPIキーを貼り付けます。OpenAIのキーを保存すると **GPT-6 Luna / medium** に切り替わります。
+3. OpenAI または Gemini のAPIキーを貼り付けます。OpenAIのキーを保存すると **GPT-6.2 Sol / medium** に切り替わります。
 4. 「保存」してから「テスト」を押し、AIが応答することを確認します。
 
 APIキーは GAS のスクリプトプロパティにだけ保存され、児童の画面には表示されません。
 
-OpenAIは Responses API（`gpt-6-luna`、`reasoning.effort: medium`）を使います。ChatGPTの契約とは別にAPI利用料金が発生します。管理画面の「テスト成功」にモデル名と `medium` が表示されることを確認してください。
+OpenAIは Responses API（`gpt-6.2-sol`、`reasoning.effort: medium`）を使います。ChatGPTの契約とは別にAPI利用料金が発生します。管理画面の「テスト成功」にモデル名と `medium` が表示されることを確認してください。
 
 GASエディタから設定する場合は、スクリプトプロパティに `OPENAI_API_KEY` と `AI_PROVIDER=openai` を登録します。既存のGeminiキーは保存されたままですが、OpenAI利用中はGeminiへ自動で切り替えません。
 

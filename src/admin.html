@@ -159,6 +159,31 @@
     #panel-people,#panel-wall,#panel-rank,#panel-prop{grid-column:1;grid-row:auto}
     .panel{min-height:240px}
   }
+
+  @media (any-pointer:coarse), (max-width:1100px){
+    .bar{flex-wrap:wrap;gap:8px;padding:10px 12px}
+    .bar .spacer{display:none}
+    .bar .meta{white-space:normal}
+    .bar .sessionsel{max-width:100%}
+    .panel,.phead-r,.panel-modal{min-width:0}
+    .phead,.phead-r{flex-wrap:wrap}
+    .phead h2{min-width:0}
+    .btn,.fsbtn,.tabbtn,.switch,.sessionsel{min-height:44px}
+    .fsbtn{min-width:44px}
+    input:not([type=checkbox]),select{font-size:16px}
+    .overlay{padding:12px max(12px,env(safe-area-inset-right)) max(18px,env(safe-area-inset-bottom))}
+    .btn:not(.ghost):not(.warn):not(.approve):not(:disabled),.tabbtn.active{background:#17677b}
+    .btn.warn{color:#9c412d}
+    .switch{line-height:1.4}
+  }
+  @media (max-width:899px), (any-pointer:coarse) and (max-height:560px){
+    body{height:auto;min-height:100%;overflow:auto}
+    .dash{grid-template-columns:minmax(0,1fr);grid-template-rows:auto;overflow:visible}
+    #panel-people,#panel-wall,#panel-rank,#panel-prop{grid-column:auto;grid-row:auto}
+    .panel{min-height:180px}
+    .panel:not(.fullscreen) .pbody{max-height:55vh}
+    .bar .sessionsel{flex:1 1 200px}
+  }
 </style>
 </head>
 <body>
@@ -219,7 +244,7 @@
           <p class="wiz-msg" id="wizTrialMsg"></p>
         </div>
         <p style="margin:6px 0"><b>自分のキーを使う:</b> <b>OpenAI または Gemini のAPIキー</b>を貼り付けます。
-          OpenAIのキーを保存すると、<b>GPT-6 Luna（推論 medium）</b>へ切り替わります。APIの利用料金は各アカウントに発生します。</p>
+          OpenAIのキーを保存すると、<b>GPT-6.2 Sol（推論 medium）</b>へ切り替わります。APIの利用料金は各アカウントに発生します。</p>
         <div class="row">
           <input id="wizKey" type="password" placeholder="作ったAPIキーを ここに貼り付け" style="flex:1" autocomplete="off">
           <button class="btn" id="wizKeyBtn">保存してテスト</button>
@@ -300,7 +325,7 @@
       <div class="sec">
         <h3>① AIのキー</h3>
         <div class="row"><span class="muted">使用するAI:</span> <span id="keyStatus" class="pill">確認中…</span></div>
-        <p class="muted">OpenAIのキーを保存すると GPT-6 Luna（推論 medium）を使います。キーはサーバーに保存され、児童の画面には渡しません。</p>
+        <p class="muted">OpenAIのキーを保存すると GPT-6.2 Sol（推論 medium）を使います。キーはサーバーに保存され、児童の画面には渡しません。</p>
         <div class="row" style="margin-top:8px">
           <input id="geminiKey" type="password" placeholder="OpenAI / Gemini APIキーを貼り付け" style="flex:1" autocomplete="off">
           <button class="btn" id="saveKeyBtn">保存</button>
