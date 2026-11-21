@@ -121,6 +121,20 @@
   .btn.approve{background:var(--ok)}
   .btn.approve:hover{background:#379e6f}
   .pdone{color:var(--ok);font-weight:800;font-size:.9rem;margin-top:8px}
+  .pedit{display:grid;gap:7px;margin-top:4px}
+  .pedit label{display:grid;gap:3px;font-size:.78rem;color:var(--ink-soft);font-weight:800}
+  .pedit input,.pedit textarea,.pedit select{font-family:inherit;font-size:16px;color:var(--ink);border:1px solid var(--line);
+    border-radius:9px;padding:7px 9px;background:#fff;width:100%;min-width:0}
+  .pedit textarea{resize:vertical;min-height:44px;line-height:1.5}
+  .pedit .phelp{font-weight:600;font-size:.76rem;color:var(--ink-soft)}
+  .perr{color:#B23A21;font-weight:800;font-size:.84rem;margin-top:6px}
+
+  /* 声をかけてほしい子（相談の印。書いた文は届かない） */
+  .sos-banner{background:#FFF3EE;border:1.5px solid #F2B8A2;border-radius:12px;padding:9px 12px;margin:0 0 10px;color:#8A3B26;font-weight:800;font-size:.9rem;line-height:1.55}
+  .sos-banner small{display:block;font-weight:600;color:#9A5A47;font-size:.78rem}
+  .cell.sos{border:2px solid #E8825F;background:#FFF7F3}
+  .cell .sos-tag{display:grid;gap:5px;margin-top:6px;font-size:.74rem;font-weight:800;color:#B23A21}
+  .cell .sos-ack{background:#fff;color:var(--teal-d);border:1px solid #9FD0DE;border-radius:8px;padding:4px 8px;font-family:inherit;font-weight:800;font-size:.78rem;cursor:pointer;min-height:36px;white-space:nowrap}
 
   /* 設定オーバーレイ */
   .overlay{position:fixed;inset:0;background:rgba(40,55,70,.45);display:none;align-items:flex-start;justify-content:center;z-index:80;overflow-y:auto;padding:30px 16px}
@@ -657,20 +671,56 @@ function renderFlags(flags){
   $('showNamesToggle').checked = flags.showNames;
 }
 
+function sosAgo(iso){
+  var t = iso ? new Date(iso).getTime() : 0;
+  if(!t) return '';
+  var sec = Math.max(0, Math.round((Date.now() - t) / 1000));
+  return sec < 60 ? 'いま' : (sec < 3600 ? Math.round(sec/60)+'分前' : pad(new Date(t).getHours())+':'+pad(new Date(t).getMinutes()));
+}
+function peopleStatus(p){
+  var cls = (p.idleSec==null) ? 'off' : (p.idleSec<60 ? 'on' : (p.idleSec<180 ? 'idle' : 'off'));
+  var idle = (p.idleSec==null) ? '—' : (p.idleSec<60 ? 'いま' : (p.idleSec<3600 ? Math.round(p.idleSec/60)+'分前' : '長め'));
+  return { cls: cls, text: p.currentTrouble ? p.currentTrouble : idle };
+}
 function renderPeople(list){
   $('countLabel').textContent = list.length + '人';
-  var s = JSON.stringify(list); if(s === _last.people) return; _last.people = s;
+  // 見た目が変わるときだけ描き直す（4秒ごとの描き直しで「確認した」ボタンが押しにくくならないように）。
+  var s = JSON.stringify(list.map(function(p){
+    var st = peopleStatus(p);
+    return [p.pid, p.name, p.score, st.cls, st.text, p.supportAt, sosAgo(p.supportAt)];
+  }));
+  if(s === _last.people) return; _last.people = s;
   if(!list.length){ $('grid').innerHTML='<div class="empty">まだ だれも 参加していません。</div>'; return; }
-  var byName = list.slice().sort(function(a,b){ return String(a.name).localeCompare(String(b.name),'ja'); });
-  $('grid').innerHTML = byName.map(function(p){
-    var cls = (p.idleSec==null) ? 'off' : (p.idleSec<60 ? 'on' : (p.idleSec<180 ? 'idle' : 'off'));
-    var idle = (p.idleSec==null) ? '—' : (p.idleSec<60 ? 'いま' : (p.idleSec<3600 ? Math.round(p.idleSec/60)+'分前' : '長め'));
-    var cur = p.currentTrouble ? esc(p.currentTrouble) : idle;
-    return '<div class="cell"><div class="nm" title="'+esc(p.name)+'">'+esc(p.name)+'</div>'
+  // 声をかけてほしい子を先頭に。並びはそのあと名前順。
+  var byName = list.slice().sort(function(a,b){
+    if(!!a.supportAt !== !!b.supportAt) return a.supportAt ? -1 : 1;
+    return String(a.name).localeCompare(String(b.name),'ja');
+  });
+  var sos = byName.filter(function(p){ return p.supportAt; });
+  var banner = sos.length
+    ? '<div class="sos-banner" role="status" style="grid-column:1 / -1">🆘 声を かけて ほしい子: '+sos.map(function(p){ return esc(p.name); }).join('、')
+      + '<small>モヤットの お話の中で、自分の つらさを 書いた 可能性が あります。書いた 文は 届きません。そっと 声を かけて、話を 聞いたら「確認した」を 押してください。</small></div>'
+    : '';
+  $('grid').innerHTML = banner + byName.map(function(p){
+    var st = peopleStatus(p);
+    var tag = p.supportAt
+      ? '<div class="sos-tag"><span>🆘 声かけ '+esc(sosAgo(p.supportAt))+'</span><button class="sos-ack" type="button" data-pid="'+esc(p.pid)+'">確認した</button></div>'
+      : '';
+    return '<div class="cell'+(p.supportAt ? ' sos' : '')+'"><div class="nm" title="'+esc(p.name)+'">'+esc(p.name)+'</div>'
       + '<div class="sc">☀️ '+p.score+'</div>'
-      + '<div class="st"><span class="dot '+cls+'"></span>'+cur+'</div></div>';
+      + '<div class="st"><span class="dot '+st.cls+'"></span>'+esc(st.text)+'</div>'+tag+'</div>';
   }).join('');
 }
+// 「確認した」で相談の印を消す（声をかけ終わった合図）。
+document.addEventListener('click', function(ev){
+  var btn = ev.target && ev.target.closest ? ev.target.closest('.sos-ack') : null;
+  if(!btn) return;
+  btn.disabled = true; btn.textContent = '…';
+  google.script.run
+    .withSuccessHandler(function(){ _last.people=''; poll(); })
+    .withFailureHandler(function(e){ btn.disabled = false; btn.textContent = '確認した'; $('meta').textContent = '印を消せませんでした: ' + (e && e.message || ''); })
+    .clearSupportFlag(ADMIN_KEY, currentCode, btn.getAttribute('data-pid'));
+});
 function renderRank(list){
   var top = (list||[]).slice().sort(function(a,b){return b.score-a.score;}).slice(0,10);
   var s = JSON.stringify(top); if(s === _last.rank) return; _last.rank = s;
@@ -711,31 +761,70 @@ function renderProps(list){
   list = list || [];
   $('propCount').textContent = list.length ? ('('+list.length+'件)') : '';
   var s = JSON.stringify(list); if(s === _last.prop) return; _last.prop = s;
+  // 新しい提案が届いて描き直しても、書きかけの直しを消さない。
+  var drafts = {};
+  Array.prototype.forEach.call($('propBody').querySelectorAll('.pcard'), function(card){
+    if (card.querySelector('.pedit')) drafts[card.getAttribute('data-id')] = propEdits(card);
+  });
   if(!list.length){ $('propBody').innerHTML='<div class="empty">承認待ちは ありません。</div>'; return; }
+  // 承認前に、事実・とらえ方・ヒントを直し、判定用の見方（児童には見えない）を書き足せる。
+  var field = function(key, label, value, rows, help){
+    var input = rows
+      ? '<textarea data-k="'+key+'" rows="'+rows+'">'+esc(value||'')+'</textarea>'
+      : '<input data-k="'+key+'" type="text" value="'+esc(value||'').replace(/"/g,'&quot;')+'">';
+    return '<label>'+label+(help ? ' <span class="phelp">'+help+'</span>' : '')+input+'</label>';
+  };
   $('propBody').innerHTML = list.map(function(p){
     return '<div class="pcard" data-id="'+esc(p.id)+'">'
-      + '<div class="pmeta">'+esc(p.name||'（名前なし）')+' ／ '+(p.type==='seikaku'?'短所・苦手':'できごと')+'</div>'
+      + '<div class="pmeta">'+esc(p.name||'（名前なし）')+'</div>'
       + '<div class="praw">入力: '+esc(p.rawText)+'</div>'
-      + '<div class="pfield"><b>'+esc(p.label)+'</b></div>'
-      + '<div class="pfield">'+esc(p.serihu)+'</div>'
-      + '<div class="pfield"><span>事実:</span> '+esc(p.fact)+'</div>'
-      + '<div class="pfield"><span>とらえ方:</span> '+esc(p.take)+'</div>'
-      + '<div class="pfield"><span>ヒント:</span> '+esc(p.tip)+'</div>'
-      + '<div class="prow"><button class="btn approve">承認</button><button class="btn warn reject">却下</button></div>'
+      + '<div class="pedit">'
+      + '<label>種類<select data-k="type"><option value="dekigoto"'+(p.type==='seikaku'?'':' selected')+'>あった できごと</option><option value="seikaku"'+(p.type==='seikaku'?' selected':'')+'>短所・苦手な こと</option></select></label>'
+      + field('label', 'なやみの 名前', p.label)
+      + field('serihu', 'モヤットの セリフ', p.serihu, 2)
+      + field('fact', '事実（ほんとうに あったこと）', p.fact)
+      + field('take', 'モヤットの とらえ方', p.take)
+      + field('tip', '考える ヒント', p.tip, 0, '答えを 言わない 問いに')
+      + field('reframes', '判定用の 見方', (p.reframes||[]).join('\n'), 3, '1行に1つ・2つ以上。児童には 見えません')
+      + '</div>'
+      + '<div class="prow"><button class="btn approve">直して 承認</button><button class="btn warn reject">却下</button></div>'
+      + '<div class="perr" aria-live="polite"></div>'
       + '</div>';
   }).join('');
   Array.prototype.forEach.call($('propBody').querySelectorAll('.pcard'), function(card){
     var id = card.getAttribute('data-id');
+    var draft = drafts[id];
+    if (draft) Array.prototype.forEach.call(card.querySelectorAll('[data-k]'), function(el){
+      var k = el.getAttribute('data-k');
+      if (k in draft) el.value = (k === 'reframes') ? draft.reframes.join('\n') : draft[k];
+    });
     card.querySelector('.approve').onclick = function(){ setProp(id, 'approved', card); };
     card.querySelector('.reject').onclick = function(){ setProp(id, 'rejected', card); };
   });
 }
+function propEdits(card){
+  var out = {};
+  Array.prototype.forEach.call(card.querySelectorAll('[data-k]'), function(el){ out[el.getAttribute('data-k')] = el.value; });
+  out.reframes = String(out.reframes || '').split(/\n+/).map(function(s){ return s.trim(); }).filter(Boolean);
+  return out;
+}
 function setProp(id, status, card){
+  var err = card.querySelector('.perr'); err.textContent = '';
+  var edits = null;
+  if (status === 'approved') {
+    edits = propEdits(card);
+    if (!edits.label.trim() || !edits.serihu.trim() || !edits.fact.trim() || !edits.take.trim()) {
+      err.textContent = 'なやみの名前・セリフ・事実・とらえ方を 入れてください。'; return;
+    }
+    if (edits.reframes.length < 2) {
+      err.textContent = '判定用の 見方を 2つ以上 書いてください（AIが 何を 認めるかの 目安に なります）。'; return;
+    }
+  }
   Array.prototype.forEach.call(card.querySelectorAll('button'), function(b){ b.disabled = true; });
   google.script.run
     .withSuccessHandler(function(){ card.querySelector('.prow').outerHTML = '<div class="pdone">'+(status==='approved'?'✅ 承認しました（みんなの 悩みに 追加）':'却下しました')+'</div>'; _last.prop=''; setTimeout(poll, 600); })
-    .withFailureHandler(function(e){ alert('エラー: '+e.message); Array.prototype.forEach.call(card.querySelectorAll('button'), function(b){ b.disabled = false; }); })
-    .setProposalStatus(ADMIN_KEY, id, status);
+    .withFailureHandler(function(e){ err.textContent = 'エラー: '+(e && e.message || ''); Array.prototype.forEach.call(card.querySelectorAll('button'), function(b){ b.disabled = false; }); })
+    .setProposalStatus(ADMIN_KEY, id, status, edits);
 }
 
 function pad(n){ return (n<10?'0':'')+n; }

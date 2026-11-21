@@ -35,7 +35,7 @@ function doGet(e) {
   var tpl = HtmlService.createTemplateFromFile('index');
   var sCode = String(p.s || '').toUpperCase();
   tpl.modesJson = safeJson_(MODES);
-  tpl.troublesJson = safeJson_(getTroubles_());
+  tpl.troublesJson = safeJson_(publicTroubles_(getTroubles_()));
   tpl.avatarsJson = safeJson_(getAvatars_());
   tpl.uiImagesJson = safeJson_(getUiImages_());
   tpl.sessionJson = safeJson_({ code: sCode, mode: getSessionMode(sCode), flags: getSessionFlags_(sCode) });
@@ -107,14 +107,47 @@ function safeJson_(obj) {
     .replace(/&/g, '\\u0026');
 }
 
+/** 児童画面に渡すお題から、判定用の見方（内部基準）を外す。判定とヒントはサーバー側の一覧を使う。 */
+function publicTroubles_(list) {
+  return (list || []).map(function (t) {
+    var card = {};
+    Object.keys(t || {}).forEach(function (key) {
+      if (key !== 'reframes') card[key] = t[key];
+    });
+    return card;
+  });
+}
+
+/** 児童画面から届いた「すでに認めた見方」を、判定の材料として安全な形にそろえる。 */
+function cleanAccepted_(list) {
+  var out = [];
+  (Array.isArray(list) ? list : []).forEach(function (s) {
+    var text = String(s || '').trim().slice(0, 120);
+    if (text && !isHeavyTopic_(text) && out.indexOf(text) < 0 && out.length < 2) out.push(text);
+  });
+  return out;
+}
+
+/**
+ * 会話が長くなって最初の見方が判定に届かなくても、一度認めた見方は取り消さない。
+ * クリアの判定そのものは AI の結果に従う（ここでは進み具合を下げないことだけを守る）。
+ */
+function keepAcceptedProgress_(result, previous) {
+  if (!result || result.support || result.retryable || result.cleared || !previous.length) return result;
+  if (result.progress >= previous.length) return result;
+  return result_(false, previous.length, previous.slice(0, 1), '', result.reply);
+}
+
 /**
  * クライアントから呼ばれるサーバ関数。
- * payload = { troubleId: string, messages: [{ role:'user'|'model', text:string }, ...] }
+ * payload = { troubleId: string, messages: [{ role:'user'|'model', text:string }, ...], acceptedReframes?: string[] }
  * 返り値   = { cleared: boolean, progress: 0|1|2, acceptedReframes: string[], reason: string, reply: string }
+ *            相談に切り替えたときは support: true、もう一度送ってほしいときは retryable: true が付く。
  */
 function askMoyatto(payload) {
   payload = payload || {};
   var trouble = findTrouble_(payload.troubleId);
+  var previous = cleanAccepted_(payload.acceptedReframes);
   if (!trouble) {
     return result_(false, 0, [], '', 'ごめん、この なやみが 見つからなかったみたい。先生に 伝えてね。');
   }
@@ -165,7 +198,8 @@ function askMoyatto(payload) {
     return friendlyFallback_();
   }
 
-  return callGemini_(buildSystemPrompt_(trouble), labelJudgementContents_(contents));
+  var judged = callGemini_(buildSystemPrompt_(trouble, previous), labelJudgementContents_(contents));
+  return keepAcceptedProgress_(judged, previous);
 }
 
 function result_(cleared, progress, acceptedReframes, reason, reply) {
@@ -273,15 +307,26 @@ function labelJudgementContents_(contents) {
   });
 }
 
-/** 重い話題の軽量ガード（完全ではないが、明白なものを拾う安全ネット）。 */
+/**
+ * 重い話題の軽量ガード（完全ではないが、明白なものを拾う安全ネット）。
+ * モヤットへのアドバイスにも出てくる言葉（「むしされた わけじゃない」「たすけられた」など）は
+ * ここでは拾わず、判定AIの concern に任せる。ここには取りちがえにくい言い方だけを置く。
+ */
 function isHeavyTopic_(text) {
   if (!text) return false;
   var t = String(text).normalize('NFKC').replace(/\s/g, '');
-  if (/(?:毎日|まいにち|何度も|なんども|いつも|何回も).{0,22}(?:無視され|むしされ|からかわれ|仲間はずれ|仲間外れ|なかまはずれ|笑われ|ばかにされ|バカにされ)/.test(t)) return true;
+  if (/(?:毎日|まいにち|何度も|なんども|いつも|何回も|ずっと|毎回|まいかい|何日も|なんにちも).{0,22}(?:無視され|むしされ|からかわれ|仲間はずれ|仲間外れ|なかまはずれ|笑われ|ばかにされ|バカにされ|悪口|わるぐち|いじわるされ|意地悪され)/.test(t)) return true;
+  if (/(?:を|に|で|から)(?:けられ|蹴られ)/.test(t)) return true;
+  if (/(?:お金|おかね|おこづかい|お小遣い)を?(?:とられ|取られ|盗まれ|ぬすまれ)/.test(t)) return true;
+  if (/(?:くつ|靴|うわばき|上ばき|上履き|ふでばこ|筆箱|筆入れ|教科書|きょうかしょ|持ち物|もちもの)を?(?:かくされ|隠され|すてられ|捨てられ)/.test(t)) return true;
+  if (/(?:家|いえ|うち)に(?:帰りたくない|かえりたくない)/.test(t)) return true;
+  if (/(?:ご飯|ごはん)を?(?:もらえない|食べさせてもらえない|たべさせてもらえない)/.test(t)) return true;
   var deny = [
-    '死にたい', 'しにたい', '消えたい', 'きえたい', '殺す', '殺し', 'ころして', 'ころされ',
+    '死にたい', 'しにたい', '消えたい', 'きえたい', '消えてしまいたい', 'いなくなりたい', '死んだほうがいい', 'しんだほうがいい',
+    '死ね', 'しねって', 'しねと言', '殺す', '殺し', 'ころして', 'ころされ',
     'リストカット', 'リスカ', '自殺', 'じさつ',
-    'いじめられ', 'いじめてくる', '殴られ', '殴る', '蹴られ', '蹴って', 'たたかれて', '叩かれ',
+    'いじめられ', 'いじめてくる', '殴られ', 'なぐられ', '殴る', '蹴られ', '蹴って', 'たたかれ', '叩かれ', 'ぶたれ',
+    'つねられ', 'おどされ', '脅され',
     'さわられ', '触られ', '虐待', 'ぎゃくたい', 'いじめら', 'いじめにあ', 'やめてと言ってもやめてくれない'
   ];
   for (var i = 0; i < deny.length; i++) {
@@ -332,9 +377,10 @@ function callGemini_(systemText, contents) {
           progress: { type: 'INTEGER' },
           acceptedReframes: { type: 'ARRAY', items: { type: 'STRING' } },
           reason: { type: 'STRING' },
-          reply: { type: 'STRING' }
+          reply: { type: 'STRING' },
+          concern: { type: 'BOOLEAN' }
         },
-        required: ['cleared', 'progress', 'acceptedReframes', 'reason', 'reply']
+        required: ['cleared', 'progress', 'acceptedReframes', 'reason', 'reply', 'concern']
       },
       thinkingConfig: thinkingConfig_()
     },
@@ -380,6 +426,8 @@ function parseResult_(text) {
   var clean = String(text).replace(/```json/gi, '').replace(/```/g, '').trim();
   try {
     var obj = JSON.parse(clean);
+    // 児童本人のつらさや被害の訴えとAIが判断したら、判定せずに大人へつなぐ。
+    if (obj && obj.concern === true) return adultSupport_();
     return result_(
       obj.cleared === true,
       obj.progress,
@@ -616,7 +664,7 @@ function moreHint(request) {
 }
 /**
  * 参加者の悩み追加: 子どもが書いた困りごとを Gemini で悩みカードに構造化し、
- * 安全判定の上で「先生承認待ち（pending）」として保存する（Session.gs addProposal）。
+ * 安全判定の上で「先生承認待ち（pending）」として保存する（Session.gs addProposal_）。
  * 返り値 = { ok, message, heavy? }
  */
 function proposeTrouble(rawText, name) {
@@ -641,7 +689,7 @@ function proposeTrouble(rawText, name) {
   // 構造化結果にも重い語が混ざっていないか軽く再チェック
   var joined = [r.label, r.serihu, r.fact, r.take, r.tip].join(' ');
   if (isHeavyTopic_(joined)) return { ok: false, heavy: true, message: 'それは 先生か おうちの人に 話してね。' };
-  var saved = addProposal(name, rawText, {
+  var saved = addProposal_(name, rawText, {
     type: (r.type === 'seikaku' ? 'seikaku' : 'dekigoto'),
     label: String(r.label || '').slice(0, 40), serihu: String(r.serihu || '').slice(0, 200),
     fact: String(r.fact || '').slice(0, 120), take: String(r.take || '').slice(0, 120), tip: String(r.tip || '').slice(0, 120)

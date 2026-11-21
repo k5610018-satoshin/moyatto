@@ -95,7 +95,7 @@ function saveReframeVotes(code, voterPid, targetRids) {
   var lock = LockService.getScriptLock();
   lock.waitLock(5000);
   try {
-    var found = _findParticipant(ss, code, voterPid);
+    var found = findParticipant_(ss, code, voterPid);
     if (!found) throw new Error('もう一回 さんか してから えらんでね。');
     var voterName = String(found.row[2] || '').slice(0, 20);
     var byRid = {};

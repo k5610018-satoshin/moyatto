@@ -120,12 +120,14 @@ function callOpenAi_(systemText, contents) {
     properties: {
       cleared: { type: 'BOOLEAN' }, progress: { type: 'INTEGER' },
       acceptedReframes: { type: 'ARRAY', items: { type: 'STRING' } },
-      reason: { type: 'STRING' }, reply: { type: 'STRING' }
+      reason: { type: 'STRING' }, reply: { type: 'STRING' }, concern: { type: 'BOOLEAN' }
     },
-    required: ['cleared', 'progress', 'acceptedReframes', 'reason', 'reply']
+    required: ['cleared', 'progress', 'acceptedReframes', 'reason', 'reply', 'concern']
   };
   try {
     var data = openAiReadJson_(openAiRequest_(openAiBody_(systemText, contents, schema)));
+    // 児童本人のつらさや被害の訴えとAIが判断したら、判定せずに大人へつなぐ。
+    if (data && data.concern === true) return adultSupport_();
     return result_(data.cleared === true, data.progress, data.acceptedReframes, data.reason, data.reply);
   } catch (error) {
     if (error.message === 'OPENAI_REFUSAL') return adultSupport_();
