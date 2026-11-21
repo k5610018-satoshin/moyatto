@@ -7,7 +7,8 @@
  *
  * 保存先: スプレッドシート（無ければ自動作成し SESSION_SHEET_ID に保存）。
  *   sessions     … code | title | created | active
- *   participants … code | pid | name | score | joinedAt | lastActiveAt | currentTrouble
+ *   participants … code | pid | name | score | joinedAt | lastActiveAt | currentTrouble | supportAt
+ *   （supportAt は「先生に声をかけてほしい」印の時刻だけ。児童が書いた文は保存しない）
  */
 
 // 先生用ダッシュボードの鍵。スクリプトプロパティ ADMIN_KEY があればそれを使う。
@@ -69,7 +70,7 @@ function getSessionSpreadsheet_() {
     var s1 = ss.getActiveSheet(); s1.setName('sessions');
     s1.appendRow(['code', 'title', 'created', 'active']);
     var s2 = ss.insertSheet('participants');
-    s2.appendRow(['code', 'pid', 'name', 'score', 'joinedAt', 'lastActiveAt', 'currentTrouble']);
+    s2.appendRow(['code', 'pid', 'name', 'score', 'joinedAt', 'lastActiveAt', 'currentTrouble', 'supportAt']);
     props.setProperty('SESSION_SHEET_ID', ss.getId());
     return ss;
   } finally {
@@ -123,10 +124,12 @@ function getLeaderboard(adminKey, code) {
     if (String(data[i][0]) !== code) continue;
     var last = data[i][5] ? new Date(data[i][5]).getTime() : 0;
     out.push({
+      pid: String(data[i][1]),
       name: String(data[i][2]),
       score: Number(data[i][3] || 0),
       idleSec: last ? Math.max(0, Math.round((now - last) / 1000)) : null,
-      currentTrouble: String(data[i][6] || '')
+      currentTrouble: String(data[i][6] || ''),
+      supportAt: String(data[i][7] || '')
     });
   }
   out.sort(function (a, b) { return b.score - a.score; });
@@ -292,7 +295,7 @@ function joinSession(code, name) {
   } finally { lock.releaseLock(); }
 }
 
-function _findParticipant(ss, code, pid) {
+function findParticipant_(ss, code, pid) {
   var sh = ss.getSheetByName('participants');
   var data = sh.getDataRange().getValues();
   for (var i = 1; i < data.length; i++) {
@@ -303,13 +306,13 @@ function _findParticipant(ss, code, pid) {
   return null;
 }
 
-function _updateParticipant(code, pid, fn) {
+function updateParticipant_(code, pid, fn) {
   code = String(code || '').toUpperCase();
   var ss = getSessionSpreadsheet_();
   var lock = LockService.getScriptLock();
   lock.waitLock(5000);
   try {
-    var found = _findParticipant(ss, code, pid);
+    var found = findParticipant_(ss, code, pid);
     if (!found) return null;   // 見つからないときは null（クライアントの数値ガードでスコアを0に潰さない）
     var result = fn(found.row);
     found.sheet.getRange(found.rowIndex, 1, 1, found.row.length).setValues([found.row]);
@@ -318,8 +321,8 @@ function _updateParticipant(code, pid, fn) {
 }
 
 /** 得点+1（クリア時）。新スコアを返す（サーバが正）。 */
-function addScore(code, pid) {
-  return _updateParticipant(code, pid, function (row) {
+function addScore_(code, pid) {
+  return updateParticipant_(code, pid, function (row) {
     row[3] = Number(row[3] || 0) + 1;
     row[5] = new Date().toISOString();
     return Number(row[3]);
@@ -339,17 +342,40 @@ function normalizeReframes_(reframes) {
 
 /** 取り組み中の悩みと最終活動時刻を記録（先生が「つまずき」を把握）。 */
 function heartbeat(code, pid, troubleLabel) {
-  return _updateParticipant(code, pid, function (row) {
+  return updateParticipant_(code, pid, function (row) {
     row[5] = new Date().toISOString();
     row[6] = String(troubleLabel || '').slice(0, 40);
     return Number(row[3] || 0);
   });
 }
 
+/**
+ * 相談の印。児童画面が「先生や おうちの人に 話してね」の返事を受けたときに呼ぶ。
+ * 先生画面に「声をかけてほしい子」として出すための時刻だけを残し、書いた文は受け取らない。
+ */
+function flagSupport(code, pid) {
+  var at = new Date().toISOString();
+  return updateParticipant_(code, pid, function (row) {
+    while (row.length < 8) row.push('');
+    row[7] = at;
+    return true;
+  }) === true;
+}
+
+/** 先生が声をかけたら印を消す。adminKey 必須。 */
+function clearSupportFlag(adminKey, code, pid) {
+  requireAdmin_(adminKey);
+  return updateParticipant_(code, pid, function (row) {
+    while (row.length < 8) row.push('');
+    row[7] = '';
+    return true;
+  }) === true;
+}
+
 /** 自分の得点を取得（端末再読込時の復元用）。 */
 function getMyScore(code, pid) {
   code = String(code || '').toUpperCase();
-  var found = _findParticipant(getSessionSpreadsheet_(), code, pid);
+  var found = findParticipant_(getSessionSpreadsheet_(), code, pid);
   return found ? Number(found.row[3] || 0) : 0;
 }
 
@@ -412,7 +438,7 @@ function migrateReframeRids_() {
 }
 
 /** クリア時に有効だった「ちがう見方」を保存（互換用）。重い語が混じれば保存しない。 */
-function saveReframe(code, pid, troubleId, troubleLabel, reframe) {
+function saveReframe_(code, pid, troubleId, troubleLabel, reframe) {
   code = String(code || '').toUpperCase();
   reframe = String(reframe || '').trim().slice(0, 200);
   if (!reframe || !code) return { ok: false };
@@ -420,7 +446,7 @@ function saveReframe(code, pid, troubleId, troubleLabel, reframe) {
   try {
     var ss = getSessionSpreadsheet_();
     var name = '';
-    var found = pid ? _findParticipant(ss, code, pid) : null;
+    var found = pid ? findParticipant_(ss, code, pid) : null;
     if (found) name = String(found.row[2] || '');
     var lock = LockService.getScriptLock(); lock.waitLock(5000);
     try {
@@ -447,7 +473,7 @@ function completeReframe(code, pid, troubleId, troubleLabel, reframes, reason) {
   var ss = getSessionSpreadsheet_();
   var lock = LockService.getScriptLock(); lock.waitLock(5000);
   try {
-    var found = _findParticipant(ss, code, pid);
+    var found = findParticipant_(ss, code, pid);
     if (!found) return { ok: false };
     var sh = getOrCreateSheet_(ss, 'reframes', REFRAMES_HEADERS_);
     var data = sh.getDataRange().getValues();
@@ -548,16 +574,43 @@ function getReframesByTrouble(adminKey, code) {
 }
 
 // ===== 参加者の悩み追加（AI構造化 → 先生承認 → プールに合流） =====
+// reframes 列には、先生が承認時に書いた「判定用の見方」を改行区切りで入れる（児童画面には出さない）。
+var PROPOSALS_HEADERS_ = ['id', 'name', 'rawText', 'label', 'serihu', 'fact', 'take', 'tip', 'type', 'status', 'createdAt', 'reframes'];
+
+/** 判定用の見方を、空行・重複を除いて最大5つにそろえる。 */
+function normalizeCriteria_(value) {
+  var arr = Array.isArray(value) ? value : String(value || '').split(/\n+/);
+  var out = [];
+  arr.forEach(function (s) {
+    var text = String(s || '').trim().slice(0, 120);
+    if (text && out.indexOf(text) < 0 && out.length < 5) out.push(text);
+  });
+  return out;
+}
+
+/** 承認時に先生が直した内容を検証する。空にできない欄が空ならエラー。 */
+function proposalEdits_(edits) {
+  if (!edits || typeof edits !== 'object') return null;
+  var clip = function (v, n) { return String(v == null ? '' : v).trim().slice(0, n); };
+  var out = {
+    type: edits.type === 'seikaku' ? 'seikaku' : 'dekigoto',
+    label: clip(edits.label, 40), serihu: clip(edits.serihu, 200), fact: clip(edits.fact, 120),
+    take: clip(edits.take, 120), tip: clip(edits.tip, 120), reframes: normalizeCriteria_(edits.reframes)
+  };
+  if (!out.label || !out.serihu || !out.fact || !out.take) {
+    throw new Error('なやみの名前・セリフ・事実・とらえ方は空にできません。');
+  }
+  return out;
+}
 
 /** 構造化済みの提案を pending で保存（Code.gs proposeTrouble から呼ぶ）。 */
-function addProposal(name, rawText, structured) {
+function addProposal_(name, rawText, structured) {
   try {
     var ss = getSessionSpreadsheet_();
     var id = 'usr_' + Utilities.getUuid().slice(0, 8);
     var lock = LockService.getScriptLock(); lock.waitLock(5000);
     try {
-      var sh = getOrCreateSheet_(ss, 'proposals',
-        ['id', 'name', 'rawText', 'label', 'serihu', 'fact', 'take', 'tip', 'type', 'status', 'createdAt']);
+      var sh = getOrCreateSheet_(ss, 'proposals', PROPOSALS_HEADERS_);
       var data = sh.getDataRange().getValues();
       var pending = 0;
       for (var i = 1; i < data.length; i++) { if (String(data[i][9]) === 'pending') pending++; }
@@ -585,17 +638,22 @@ function listProposals(adminKey, status) {
         id: String(data[i][0]), name: String(data[i][1]), rawText: String(data[i][2]),
         label: String(data[i][3]), serihu: String(data[i][4]), fact: String(data[i][5]),
         take: String(data[i][6]), tip: String(data[i][7]), type: String(data[i][8]),
-        status: String(data[i][9]), createdAt: String(data[i][10])
+        status: String(data[i][9]), createdAt: String(data[i][10]),
+        reframes: normalizeCriteria_(data[i][11])
       });
     }
   } catch (e) { return []; }
   return out.reverse();
 }
 
-/** 提案の状態変更（approved/rejected/pending）。adminKey 必須。承認時はプールのキャッシュを破棄。 */
-function setProposalStatus(adminKey, id, status) {
+/**
+ * 提案の状態変更（approved/rejected/pending）。adminKey 必須。承認時はプールのキャッシュを破棄。
+ * edits を渡すと、承認前に先生が直したセリフ・事実・とらえ方・ヒント・判定用の見方で上書きする。
+ */
+function setProposalStatus(adminKey, id, status, edits) {
   requireAdmin_(adminKey);
   if (['approved', 'rejected', 'pending'].indexOf(status) < 0) throw new Error('bad status');
+  var fixed = proposalEdits_(edits);
   var sh = getSessionSpreadsheet_().getSheetByName('proposals');
   if (!sh) return false;
   var lock = LockService.getScriptLock(); lock.waitLock(5000);
@@ -603,6 +661,10 @@ function setProposalStatus(adminKey, id, status) {
     var data = sh.getDataRange().getValues();
     for (var i = 1; i < data.length; i++) {
       if (String(data[i][0]) === id) {
+        if (fixed) {
+          sh.getRange(i + 1, 4, 1, 6).setValues([[fixed.label, fixed.serihu, fixed.fact, fixed.take, fixed.tip, fixed.type]]);
+          sh.getRange(i + 1, 12).setValue(fixed.reframes.join('\n'));
+        }
         sh.getRange(i + 1, 10).setValue(status);
         try { CacheService.getScriptCache().remove('approved_troubles'); } catch (e) {}
         return true;
@@ -630,13 +692,16 @@ function getApprovedExtraTroubles_() {
     var out = [];
     for (var i = 1; i < data.length; i++) {
       if (String(data[i][9]) !== 'approved') continue;
-      out.push({
+      var extra = {
         id: String(data[i][0]),
         type: (String(data[i][8]) === 'seikaku' ? 'seikaku' : 'dekigoto'),
         emo: '🌱',
         label: String(data[i][3]), serihu: String(data[i][4]),
         fact: String(data[i][5]), take: String(data[i][6]), tip: String(data[i][7])
-      });
+      };
+      var criteria = normalizeCriteria_(data[i][11]);
+      if (criteria.length) extra.reframes = criteria;
+      out.push(extra);
     }
     cache.put('approved_troubles', JSON.stringify(out), 30);
     return out;
